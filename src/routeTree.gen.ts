@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WorkspaceRouteImport } from './routes/workspace'
 import { Route as UploadRouteImport } from './routes/upload'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as GraphRouteImport } from './routes/graph'
 import { Route as ExplorerRouteImport } from './routes/explorer'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
@@ -25,6 +26,11 @@ const WorkspaceRoute = WorkspaceRouteImport.update({
 const UploadRoute = UploadRouteImport.update({
   id: '/upload',
   path: '/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GraphRoute = GraphRouteImport.update({
@@ -58,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/explorer': typeof ExplorerRoute
   '/graph': typeof GraphRoute
+  '/search': typeof SearchRoute
   '/upload': typeof UploadRoute
   '/workspace': typeof WorkspaceRoute
   '/document/$id': typeof DocumentIdRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/explorer': typeof ExplorerRoute
   '/graph': typeof GraphRoute
+  '/search': typeof SearchRoute
   '/upload': typeof UploadRoute
   '/workspace': typeof WorkspaceRoute
   '/document/$id': typeof DocumentIdRoute
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/explorer': typeof ExplorerRoute
   '/graph': typeof GraphRoute
+  '/search': typeof SearchRoute
   '/upload': typeof UploadRoute
   '/workspace': typeof WorkspaceRoute
   '/document/$id': typeof DocumentIdRoute
@@ -88,6 +97,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/explorer'
     | '/graph'
+    | '/search'
     | '/upload'
     | '/workspace'
     | '/document/$id'
@@ -97,6 +107,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/explorer'
     | '/graph'
+    | '/search'
     | '/upload'
     | '/workspace'
     | '/document/$id'
@@ -106,6 +117,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/explorer'
     | '/graph'
+    | '/search'
     | '/upload'
     | '/workspace'
     | '/document/$id'
@@ -116,6 +128,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   ExplorerRoute: typeof ExplorerRoute
   GraphRoute: typeof GraphRoute
+  SearchRoute: typeof SearchRoute
   UploadRoute: typeof UploadRoute
   WorkspaceRoute: typeof WorkspaceRoute
   DocumentIdRoute: typeof DocumentIdRoute
@@ -135,6 +148,13 @@ declare module '@tanstack/react-router' {
       path: '/upload'
       fullPath: '/upload'
       preLoaderRoute: typeof UploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/graph': {
@@ -180,6 +200,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   ExplorerRoute: ExplorerRoute,
   GraphRoute: GraphRoute,
+  SearchRoute: SearchRoute,
   UploadRoute: UploadRoute,
   WorkspaceRoute: WorkspaceRoute,
   DocumentIdRoute: DocumentIdRoute,
