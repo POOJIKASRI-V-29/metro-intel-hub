@@ -43,9 +43,9 @@ const keywords = ["track-3", "signalling", "AMC", "incident", "tender-2026", "ri
 
 function Heatmap() {
   return (
-    <div className="grid grid-cols-26 gap-1" style={{ gridTemplateColumns: "repeat(26, minmax(0,1fr))" }}>
+    <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(26, minmax(0,1fr))" }}>
       {Array.from({ length: 7 * 26 }).map((_, i) => {
-        const v = Math.random();
+        const v = ((i * 73 + 13) % 100) / 100;
         const op = v < 0.3 ? 0.08 : v < 0.6 ? 0.25 : v < 0.85 ? 0.55 : 0.9;
         return <div key={i} className="aspect-square rounded-[3px]" style={{ background: `oklch(0.66 0.21 260 / ${op})` }} />;
       })}

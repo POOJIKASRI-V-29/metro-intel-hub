@@ -44,7 +44,7 @@ function Heat() {
   return (
     <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(24, minmax(0,1fr))" }}>
       {Array.from({ length: 7 * 24 }).map((_, i) => {
-        const v = Math.random();
+        const v = ((i * 53 + 7) % 100) / 100;
         return <div key={i} className="aspect-square rounded-sm" style={{ background: `oklch(0.85 0.16 215 / ${0.08 + v * 0.7})` }} />;
       })}
     </div>
