@@ -1,8 +1,8 @@
 import chromadb
 import logging
 from typing import List, Dict, Any
-from api.schemas.internal_schema import Chunk
-from .embedder import BGEEmbedder
+from src.ingestion.internal_schema import Chunk
+from .embedder_model import BGEEmbedder
 
 logger = logging.getLogger(__name__)
 

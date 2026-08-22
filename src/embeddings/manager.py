@@ -16,7 +16,7 @@ except ImportError:
     SentenceTransformer = None
 
 # Relative schema imports from within the same module folder
-from .schemas import EmbeddingConfig, VectorizedChunk
+from .embedding_schema import EmbeddingConfig, VectorizedChunk
 from ..preprocessing.chunker import TextChunk
 
 # Setup logger mapping to Stage 0 configurations

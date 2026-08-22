@@ -64,16 +64,51 @@ class SearchResultItem(BaseModel):
     metadata: DocumentMetadata = Field(..., description="Source document metadata.")
 
 
+class TextSnippetMatch(BaseModel):
+    """A single matching text fragment within a document."""
+    chunk_id: str = Field(..., description="Unique ID of the matching text chunk.")
+    text: str = Field(..., description="The raw snippet text to display.")
+    score: float = Field(..., description="Localized similarity score for this snippet.")
+
+
+class SearchDocumentResult(BaseModel):
+    """A grouped, document-level search result ready for UI presentation."""
+    document_id: str = Field(..., description="ID of the parent document.")
+    filename: str = Field(..., description="Original filename of the document.")
+    aggregate_score: float = Field(..., description="Document-level relevance score (best snippet).")
+    matches: List[TextSnippetMatch] = Field(
+        default_factory=list, description="Relevant snippets found within this document."
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Document-level metadata tags."
+    )
+
+
 class SearchResponse(BaseModel):
     """
     Payload for document search responses.
     """
-    results: List[SearchResultItem] = Field(
-        default_factory=list, 
-        description="Ranked list of relevant document chunks."
+    query: str = Field(..., description="The original search query that was executed.")
+    results_count: int = Field(default=0, description="Number of documents returned.")
+    documents: List[SearchDocumentResult] = Field(
+        default_factory=list, description="Ranked list of matching documents."
     )
-    total_found: int = Field(default=0, description="Total number of chunks matching the query.")
-    search_time_ms: float = Field(default=0.0, description="Time taken to execute the search in milliseconds.")
+
+
+class CitationSource(BaseModel):
+    """A document chunk cited by the assistant in a RAG answer."""
+    document_id: str = Field(..., description="ID of the cited source document.")
+    filename: str = Field(..., description="Filename of the cited source.")
+    page_number: Optional[Any] = Field(default=None, description="Page label/number, if known.")
+    text_snippet: str = Field(..., description="The exact text used as grounding context.")
+    similarity_score: Optional[float] = Field(default=None, description="Relevance score of the citation.")
+
+
+class TokenUsage(BaseModel):
+    """Token accounting telemetry returned by the generation engine."""
+    prompt_tokens: int = Field(default=0, description="Tokens consumed by the prompt.")
+    completion_tokens: int = Field(default=0, description="Tokens produced in the completion.")
+    total_tokens: int = Field(default=0, description="Total tokens billed for the turn.")
 
 
 class ChatResponse(BaseModel):
@@ -81,11 +116,12 @@ class ChatResponse(BaseModel):
     Payload for conversational RAG responses.
     """
     session_id: str = Field(..., description="The session ID to maintain chat history.")
-    reply: str = Field(..., description="The LLM-generated response.")
-    source_documents: List[SearchResultItem] = Field(
-        default_factory=list, 
-        description="The document chunks used by the LLM to generate the answer."
+    answer: str = Field(..., description="The LLM-generated response.")
+    citations: List[CitationSource] = Field(
+        default_factory=list,
+        description="The document chunks the LLM used to ground its answer.",
     )
+    usage: Optional[TokenUsage] = Field(default=None, description="Token usage telemetry, if available.")
 
 
 class SummaryResponse(BaseModel):

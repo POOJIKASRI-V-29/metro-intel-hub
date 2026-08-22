@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import List
 
-from config.logging_config import get_logger
-from agents.metadata_agent import MetadataAgent, MetadataExtractionResult
+from config.logging import get_logger
+from src.agents.metadata_agent import MetadataAgent, MetadataExtractionResult
 
 logger = get_logger(__name__)
 

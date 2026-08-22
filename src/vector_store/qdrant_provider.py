@@ -19,7 +19,7 @@ except ImportError:
     qmodels = None
 
 from .base import BaseVectorStore, SearchFilter, SearchResult
-from ..embeddings.schemas import VectorizedChunk
+from ..embeddings.embedding_schema import VectorizedChunk
 
 # Setup logger mapping to Stage 0 configurations
 logger = logging.getLogger("document_intelligence.vector_store.qdrant_provider")

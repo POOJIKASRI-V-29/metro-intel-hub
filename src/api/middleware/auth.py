@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from middleware.logging_middleware import RequestTracingMiddleware
-from middleware.error_handlers import setup_exception_handlers
-from routes import upload, search, chat, graph
+from src.api.middleware.logging import RequestTracingMiddleware
+from src.api.middleware.error_handlers import setup_exception_handlers
+from src.api.routes import upload, search, chat, graph
 
 def create_app() -> FastAPI:
     app = FastAPI(title="KMRL Platform API")

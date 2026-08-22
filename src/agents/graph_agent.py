@@ -12,8 +12,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Callable, Any, List
 
-from config.logging_config import get_logger
-from utils.constants import EntityType, RelationType
+from config.logging import get_logger
+from src.utils.constants import EntityType, RelationType
 
 logger = get_logger(__name__)
 

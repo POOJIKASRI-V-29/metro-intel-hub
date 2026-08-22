@@ -12,8 +12,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from config.logging_config import get_logger
-from utils.constants import ErrorCode
+from config.logging import get_logger
+from src.utils.constants import ErrorCode
 
 logger = get_logger(__name__)
 

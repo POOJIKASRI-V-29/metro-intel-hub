@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from typing import Callable, Any
 
-from config.logging_config import get_logger
+from config.logging import get_logger
 
 logger = get_logger(__name__)
 

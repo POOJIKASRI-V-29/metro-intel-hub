@@ -14,7 +14,7 @@ from typing import Callable, Awaitable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from config.logging_config import get_logger
+from config.logging import get_logger
 
 logger = get_logger(__name__)
 

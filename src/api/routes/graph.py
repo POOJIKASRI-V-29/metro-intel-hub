@@ -10,8 +10,8 @@ from typing import Any, Dict, List
 from fastapi import APIRouter, HTTPException, Path, Query, status
 from pydantic import BaseModel
 
-from config.logging_config import get_logger
-from utils.constants import ErrorCode, EntityType, RelationType
+from config.logging import get_logger
+from src.utils.constants import ErrorCode, EntityType, RelationType
 
 logger = get_logger(__name__)
 
