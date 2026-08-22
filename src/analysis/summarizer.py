@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from config.logging_config import get_logger
-from agents.summarizer_agent import SummarizerAgent, SummaryResult
+from config.logging import get_logger
+from src.agents.summarizer_agent import SummarizerAgent, SummaryResult
 
 logger = get_logger(__name__)
 

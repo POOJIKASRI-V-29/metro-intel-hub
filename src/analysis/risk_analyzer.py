@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import List
 
-from config.logging_config import get_logger
-from agents.risk_agent import RiskAgent, RiskAssessmentResult, RiskItem
+from config.logging import get_logger
+from src.agents.risk_agent import RiskAgent, RiskAssessmentResult, RiskItem
 
 logger = get_logger(__name__)
 

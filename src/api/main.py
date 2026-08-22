@@ -6,6 +6,7 @@ and mounts sub-routers into a unified, secure web service.
 """
 
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -19,6 +20,12 @@ from .dependencies import get_vector_store, get_embedding_manager, get_llm_manag
 from .routes.upload import router as upload_router
 from .routes.search import router as search_router
 from .routes.chat import router as chat_router
+from .routes.analytics import router as analytics_router
+from .routes.graph import router as graph_router
+from .routes.classify import router as classify_router
+from .routes.metadata import router as metadata_router
+from .routes.recommend import router as recommend_router
+from .routes.summarize import router as summarize_router
 
 # Setup unified system logging formatters matching Stage 0 configurations
 logging.basicConfig(
@@ -39,18 +46,24 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing KMRL Document Intelligence Core Core Server...")
     logger.info("==================================================")
     
-    try:
-        # Pre-warm heavy resources immediately on startup to catch configurations flaws early
-        logger.info("Pre-warming Database client pools and model weights...")
-        v_store = get_vector_store()
-        embedder = get_embedding_manager()
-        llm = get_llm_manager()
-        
-        logger.info("All heavy connections and ML models verified successfully.")
-    except Exception as init_error:
-        logger.critical(f"Critical System Initialization Failure during bootstrap sequence: {str(init_error)}")
-        # Raise to halt the server process from running in a zombie state
-        raise init_error
+    # Pre-warming loads the embedding model and opens the vector-store / LLM
+    # connections up front. It requires the full ML stack and running services, so
+    # it is opt-in via PREWARM=1 and never fatal: the API still boots (and each
+    # ML-backed route returns a clean 503) if a backend is unavailable.
+    if os.getenv("PREWARM", "0") == "1":
+        logger.info("PREWARM=1 -> pre-warming database client pools and model weights...")
+        for name, provider in (
+            ("vector_store", get_vector_store),
+            ("embedding_manager", get_embedding_manager),
+            ("llm_manager", get_llm_manager),
+        ):
+            try:
+                provider()
+                logger.info("Pre-warmed '%s'.", name)
+            except Exception as init_error:  # noqa: BLE001
+                logger.warning("Could not pre-warm '%s': %s", name, init_error)
+    else:
+        logger.info("Skipping pre-warm (set PREWARM=1 to eagerly load ML backends).")
 
     yield  # --- The FastAPI Server sits here serving requests while active ---
 
@@ -121,6 +134,12 @@ async def unhandled_global_exception_handler(request: Request, exc: Exception):
 app.include_router(upload_router)
 app.include_router(search_router)
 app.include_router(chat_router)
+app.include_router(analytics_router)
+app.include_router(graph_router)
+app.include_router(classify_router)
+app.include_router(metadata_router)
+app.include_router(recommend_router)
+app.include_router(summarize_router)
 
 
 @app.get("/health", tags=["System Lifecycle Support"])

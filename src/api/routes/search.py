@@ -7,14 +7,18 @@ pipelines, enabling secure, fast query execution over raw document vector embedd
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException
+from typing import TYPE_CHECKING
 
 # Import the Dependency Injection framework
 from ..dependencies import get_search_pipeline
 
-# Import the orchestrator and the centralized enterprise validation schemas
-from ...pipeline.search_pipeline import SearchPipeline
+# Import the centralized enterprise validation schemas. The concrete pipeline pulls the
+# heavy ML stack, so it is imported only for type-checking.
 from ..schemas.request_schema import SearchRequest, SearchType
 from ..schemas.response_schema import SearchResponse, SearchDocumentResult, TextSnippetMatch
+
+if TYPE_CHECKING:
+    from ...pipeline.search_pipeline import SearchPipeline
 
 logger = logging.getLogger("document_intelligence.api.routes.search")
 
@@ -24,7 +28,7 @@ router = APIRouter(prefix="/v1/search", tags=["Document Retrieval Operations"])
 @router.post("", response_model=SearchResponse)
 async def execute_document_search(
     request: SearchRequest,
-    pipeline: SearchPipeline = Depends(get_search_pipeline)
+    pipeline: "SearchPipeline" = Depends(get_search_pipeline)
 ) -> SearchResponse:
     """
     Executes an atomic document search request. 
@@ -59,14 +63,14 @@ async def execute_document_search(
                     text=match.text,
                     score=match.score
                 )
-                for match in doc.matches
+                for match in doc.snippets
             ]
 
             serialized_documents.append(
                 SearchDocumentResult(
                     document_id=doc.document_id,
                     filename=doc.filename,
-                    aggregate_score=doc.aggregate_score,
+                    aggregate_score=doc.relevance_score,
                     matches=snippet_matches,
                     metadata=doc.metadata
                 )

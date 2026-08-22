@@ -11,12 +11,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict
 
-from config.logging_config import get_logger
-from agents.classifier_agent import ClassifierAgent, ClassificationResult
-from agents.metadata_agent import MetadataAgent, MetadataExtractionResult
-from agents.risk_agent import RiskAgent, RiskAssessmentResult
-from agents.graph_agent import GraphAgent, GraphExtractionResult
-from agents.storage_agent import StorageAgent, StorageDecision
+from config.logging import get_logger
+from src.agents.classifier_agent import ClassifierAgent, ClassificationResult
+from src.agents.metadata_agent import MetadataAgent, MetadataExtractionResult
+from src.agents.risk_agent import RiskAgent, RiskAssessmentResult
+from src.agents.graph_agent import GraphAgent, GraphExtractionResult
+from src.agents.storage_agent import StorageAgent, StorageDecision
 
 logger = get_logger(__name__)
 

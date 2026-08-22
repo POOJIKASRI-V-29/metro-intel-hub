@@ -8,15 +8,18 @@ triggers the underlying DocumentUploadPipeline to vectorize the data.
 import logging
 import json
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 # Import the Dependency Injection getter
 # (Assuming dependencies.py is one level up in the api/ folder)
 from ..dependencies import get_upload_pipeline
 
-# Import the underlying pipeline and our new schema
-from ...pipeline.upload_pipeline import DocumentUploadPipeline
+# The concrete pipeline pulls the heavy ML stack (torch / qdrant); import it only for
+# type-checking so this route module stays importable without those dependencies.
 from ..schemas.upload_schema import UploadResponse
+
+if TYPE_CHECKING:
+    from ...pipeline.upload_pipeline import DocumentUploadPipeline
 
 logger = logging.getLogger("document_intelligence.api.routes.upload")
 
@@ -27,7 +30,7 @@ router = APIRouter(prefix="/v1/documents", tags=["Document Ingestion"])
 async def upload_document(
     file: UploadFile = File(..., description="The physical file to upload (e.g., PDF, TXT)."),
     metadata_str: Optional[str] = Form(None, alias="metadata", description="Optional JSON string containing file metadata."),
-    pipeline: DocumentUploadPipeline = Depends(get_upload_pipeline)
+    pipeline: "DocumentUploadPipeline" = Depends(get_upload_pipeline)
 ):
     """
     Receives a file upload, processes it through the ingestion pipeline, 
@@ -63,7 +66,7 @@ async def upload_document(
             filename=filename,
             document_id=result.document_id,
             status=result.status,
-            chunks_created=result.chunks_created,
+            chunks_created=result.chunks_processed,
             metadata_attached=user_metadata
         )
 

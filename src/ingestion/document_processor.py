@@ -3,7 +3,7 @@ import logging
 from .pdf_reader import PDFReader
 from .docx_reader import DocxReader
 from .image_reader import ImageReader
-from api.schemas.internal_schema import ProcessedDocument
+from src.ingestion.internal_schema import ProcessedDocument
 
 logger = logging.getLogger(__name__)
 

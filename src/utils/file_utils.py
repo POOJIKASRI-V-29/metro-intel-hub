@@ -15,8 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional
 
-from config.logging_config import get_logger
-from utils.constants import EXTENSION_TO_MIME_TYPE, SupportedMimeType
+from config.logging import get_logger
+from src.utils.constants import EXTENSION_TO_MIME_TYPE, SupportedMimeType
 
 logger = get_logger(__name__)
 

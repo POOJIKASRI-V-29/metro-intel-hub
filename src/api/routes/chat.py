@@ -7,14 +7,19 @@ integrating context retrieval, conversational memory parsing, and LLM text gener
 
 import logging
 from fastapi import APIRouter, Depends, HTTPException
+from typing import TYPE_CHECKING
 
 # Import dependency framework
 from ..dependencies import get_chat_pipeline
 
-# Import underlying orchestrator, types, and strict validation schemas
-from ...pipeline.chat_pipeline import ChatPipeline, ChatMessage as PipelineChatMessage
+# Import strict validation schemas. The concrete chat pipeline pulls the heavy ML stack,
+# so its type is imported only for type-checking and its runtime message type is imported
+# lazily inside the handler.
 from ..schemas.request_schema import ChatRequest
 from ..schemas.response_schema import ChatResponse, CitationSource, TokenUsage
+
+if TYPE_CHECKING:
+    from ...pipeline.chat_pipeline import ChatPipeline
 
 logger = logging.getLogger("document_intelligence.api.routes.chat")
 
@@ -24,7 +29,7 @@ router = APIRouter(prefix="/v1/chat", tags=["Conversational RAG Operations"])
 @router.post("", response_model=ChatResponse)
 async def execute_rag_chat_turn(
     request: ChatRequest,
-    pipeline: ChatPipeline = Depends(get_chat_pipeline)
+    pipeline: "ChatPipeline" = Depends(get_chat_pipeline)
 ) -> ChatResponse:
     """
     Processes a conversation turn by fetching contextual document snippets, 
@@ -36,6 +41,9 @@ async def execute_rag_chat_turn(
     )
 
     try:
+        # Imported lazily so this module stays importable without the heavy ML stack.
+        from ...pipeline.chat_pipeline import ChatMessage as PipelineChatMessage
+
         # Step 1: Map the inbound schema chat history objects to internal pipeline message items
         mapped_history = [
             PipelineChatMessage(role=msg.role, content=msg.content)

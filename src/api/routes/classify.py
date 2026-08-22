@@ -9,8 +9,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from config.logging_config import get_logger
-from utils.constants import ErrorCode, DocumentCategory
+from config.logging import get_logger
+from src.utils.constants import ErrorCode, DocumentCategory
 
 logger = get_logger(__name__)
 

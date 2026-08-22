@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any
-from embeddings.vector_store import ChromaVectorStore
+from src.embeddings.vector_store import ChromaVectorStore
 
 logger = logging.getLogger(__name__)
 

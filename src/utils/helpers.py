@@ -16,7 +16,7 @@ import time
 import uuid
 from typing import Any, Callable, Optional, Type, TypeVar
 
-from config.logging_config import get_logger
+from config.logging import get_logger
 
 logger = get_logger(__name__)
 

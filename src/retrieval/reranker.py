@@ -12,7 +12,7 @@ from typing import Any, Dict, List
 from sentence_transformers import CrossEncoder
 
 from config.logging import get_logger
-from utils.loggers import log_execution_time
+from src.utils.logger import log_execution_time
 
 logger = get_logger(__name__)
 

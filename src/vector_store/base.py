@@ -10,7 +10,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-from ..embeddings.schemas import VectorizedChunk
+from ..embeddings.embedding_schema import VectorizedChunk
 
 # Setup logger mapping to Stage 0 configurations
 logger = logging.getLogger("document_intelligence.vector_store.base")

@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import List
 
-from config.logging_config import get_logger
-from agents.classifier_agent import ClassifierAgent, ClassificationResult
-from utils.constants import DocumentCategory
+from config.logging import get_logger
+from src.agents.classifier_agent import ClassifierAgent, ClassificationResult
+from src.utils.constants import DocumentCategory
 
 logger = get_logger(__name__)
 

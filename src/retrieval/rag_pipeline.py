@@ -10,9 +10,9 @@ from typing import Any, Dict, List
 
 from config.logging import get_logger
 from config.prompts import PromptName, render_prompt
-from embeddings.manager import EmbeddingManager
-from llm.llm_client import LLMClient
-from utils.loggers import log_execution_time
+from src.embeddings.manager import EmbeddingManager
+from src.llm.llm_client import LLMClient
+from src.utils.logger import log_execution_time
 
 logger = get_logger(__name__)
 
