@@ -1,139 +1,150 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { motion } from "motion/react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { PageShell, GlassCard, MetroPill } from "@/components/ui-bits";
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { GlassCard, PageShell, MetroPill } from "@/components/ui-bits";
+import { Network, AlertTriangle, Loader2, FileText } from "lucide-react";
+import { useDocumentGraph, useDocuments } from "@/lib/api/hooks";
 
 export const Route = createFileRoute("/graph")({
-  head: () => ({ meta: [{ title: "Knowledge Graph Universe — KMRL DocIntel" }, { name: "description", content: "Interactive knowledge graph of contracts, departments, projects, engineers, vendors and safety." }] }),
+  head: () => ({ meta: [{ title: "Knowledge Graph — KMRL DocIntel" }, { name: "description", content: "Entities and relationships extracted from KMRL documents." }] }),
   component: GraphPage,
 });
 
-type Node = { id: string; label: string; type: "contract" | "dept" | "project" | "engineer" | "vendor" | "safety"; x: number; y: number };
-type Edge = [string, string];
-
-const typeColor: Record<Node["type"], string> = {
-  contract: "var(--purple-glow)",
-  dept: "var(--electric)",
-  project: "var(--cyan-glow)",
-  engineer: "#7cffb2",
-  vendor: "#ffb84d",
-  safety: "#ff6b6b",
+const typeColors: Record<string, string> = {
+  PERSON: "#ff6b9d",
+  LOCATION: "var(--cyan-glow)",
+  ORGANIZATION: "var(--purple-glow)",
+  REGULATION: "#ffb84d",
+  EQUIPMENT: "#7cffb2",
 };
 
-const nodes: Node[] = [
-  { id: "d1", label: "Engineering", type: "dept", x: 500, y: 280 },
-  { id: "d2", label: "Procurement", type: "dept", x: 220, y: 180 },
-  { id: "d3", label: "Safety", type: "dept", x: 760, y: 180 },
-  { id: "p1", label: "Track-3 Upgrade", type: "project", x: 380, y: 420 },
-  { id: "p2", label: "Phase-II Civil", type: "project", x: 620, y: 420 },
-  { id: "p3", label: "OHE Modernization", type: "project", x: 500, y: 540 },
-  { id: "c1", label: "AMC #A-2024-31", type: "contract", x: 180, y: 320 },
-  { id: "c2", label: "Tender T-2026/04", type: "contract", x: 80, y: 130 },
-  { id: "v1", label: "Alstom", type: "vendor", x: 60, y: 240 },
-  { id: "v2", label: "Siemens", type: "vendor", x: 880, y: 380 },
-  { id: "v3", label: "L&T", type: "vendor", x: 920, y: 240 },
-  { id: "e1", label: "R. Menon", type: "engineer", x: 320, y: 100 },
-  { id: "e2", label: "S. Pillai", type: "engineer", x: 680, y: 100 },
-  { id: "e3", label: "A. Nair", type: "engineer", x: 700, y: 540 },
-  { id: "s1", label: "Safety Manual v8.2", type: "safety", x: 860, y: 110 },
-  { id: "s2", label: "Incident C-08", type: "safety", x: 920, y: 480 },
-];
-
-const edges: Edge[] = [
-  ["d1", "p1"], ["d1", "p2"], ["d1", "p3"], ["d1", "e1"], ["d1", "e2"], ["d1", "e3"],
-  ["d2", "c1"], ["d2", "c2"], ["d2", "v1"], ["d2", "v3"],
-  ["d3", "s1"], ["d3", "s2"],
-  ["c1", "v1"], ["c2", "v1"],
-  ["p1", "e1"], ["p2", "v3"], ["p3", "v2"],
-  ["s2", "p1"], ["s1", "d1"],
-];
+function colorFor(type: string): string {
+  return typeColors[type?.toUpperCase()] ?? "var(--electric)";
+}
 
 function GraphPage() {
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [hover, setHover] = useState<Node | null>(null);
-  const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  const documents = useDocuments();
+  const [selected, setSelected] = useState<string>("");
 
-  const nodeMap = useMemo(() => Object.fromEntries(nodes.map((n) => [n.id, n])), []);
+  const docs = useMemo(() => documents.data?.documents ?? [], [documents.data]);
+  const activeId = selected || docs[0]?.document_id || "";
+  const graph = useDocumentGraph(activeId);
+
+  // Circular layout: enough to read a small neighbourhood without a physics engine.
+  const layout = useMemo(() => {
+    const nodes = graph.data?.nodes ?? [];
+    const radius = 150;
+    return nodes.map((node, i) => {
+      const angle = (i / Math.max(1, nodes.length)) * Math.PI * 2 - Math.PI / 2;
+      return { node, x: 200 + Math.cos(angle) * radius, y: 200 + Math.sin(angle) * radius };
+    });
+  }, [graph.data]);
+
+  const positionOf = (id: string) => layout.find((entry) => entry.node.entity_id === id);
 
   return (
-    <PageShell title="Knowledge Graph Universe" subtitle="Every entity, every relationship — visualized as a living network.">
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <GlassCard className="relative overflow-hidden p-0">
-          <div className="absolute right-3 top-3 z-10 flex gap-1">
-            <button onClick={() => setZoom((z) => Math.min(2, z + 0.15))} className="glass grid h-9 w-9 place-items-center rounded-xl"><ZoomIn className="h-4 w-4" /></button>
-            <button onClick={() => setZoom((z) => Math.max(0.5, z - 0.15))} className="glass grid h-9 w-9 place-items-center rounded-xl"><ZoomOut className="h-4 w-4" /></button>
-            <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} className="glass grid h-9 w-9 place-items-center rounded-xl"><Maximize2 className="h-4 w-4" /></button>
-          </div>
-          <div
-            className="relative h-[640px] cursor-grab active:cursor-grabbing"
-            onMouseDown={(e) => setDrag({ x: e.clientX - pan.x, y: e.clientY - pan.y })}
-            onMouseUp={() => setDrag(null)}
-            onMouseLeave={() => setDrag(null)}
-            onMouseMove={(e) => { if (drag) setPan({ x: e.clientX - drag.x, y: e.clientY - drag.y }); }}
-          >
-            <div className="absolute inset-0 grid-bg opacity-40" />
-            <svg viewBox="0 0 1000 640" className="absolute inset-0 h-full w-full" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center" }}>
-              <defs>
-                <linearGradient id="edge" x1="0" x2="1">
-                  <stop offset="0%" stopColor="oklch(0.85 0.16 215)" stopOpacity="0.5" />
-                  <stop offset="100%" stopColor="oklch(0.66 0.21 260)" stopOpacity="0.5" />
-                </linearGradient>
-              </defs>
-              {edges.map(([a, b], i) => {
-                const A = nodeMap[a], B = nodeMap[b];
-                return <motion.line key={i} x1={A.x} y1={A.y} x2={B.x} y2={B.y} stroke="url(#edge)" strokeWidth={1.4}
-                  initial={{ pathLength: 0, opacity: 0 }} animate={{ pathLength: 1, opacity: 1 }} transition={{ duration: 1.2, delay: i * 0.03 }} />;
-              })}
-              {nodes.map((n, i) => (
-                <motion.g key={n.id} initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3 + i * 0.04, type: "spring", stiffness: 200 }}
-                  onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(null)} style={{ cursor: "pointer" }}>
-                  <circle cx={n.x} cy={n.y} r={n.type === "dept" ? 26 : 18} fill={typeColor[n.type]} opacity={0.15} />
-                  <circle cx={n.x} cy={n.y} r={n.type === "dept" ? 14 : 9} fill={typeColor[n.type]} style={{ filter: `drop-shadow(0 0 10px ${typeColor[n.type]})` }} />
-                  <text x={n.x} y={n.y + (n.type === "dept" ? 38 : 30)} textAnchor="middle" className="fill-foreground" style={{ fontSize: 11, fontWeight: 500 }}>{n.label}</text>
-                </motion.g>
-              ))}
-            </svg>
+    <PageShell
+      title="Knowledge Graph"
+      subtitle="Entities and relationships extracted from your documents."
+    >
+      {docs.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {docs.map((d) => (
+            <button key={d.document_id} onClick={() => setSelected(d.document_id)}
+              className={`rounded-full border px-3 py-1.5 text-xs transition ${activeId === d.document_id ? "border-transparent bg-aurora text-white" : "border-white/10 bg-white/5 text-muted-foreground hover:text-foreground"}`}>
+              {d.filename}
+            </button>
+          ))}
+        </div>
+      )}
 
-            {hover && (
-              <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                className="glass-strong absolute left-4 bottom-4 max-w-xs rounded-2xl p-4">
-                <MetroPill color={typeColor[hover.type]}>{hover.type}</MetroPill>
-                <div className="mt-2 text-lg font-semibold">{hover.label}</div>
-                <div className="mt-1 text-xs text-muted-foreground">Connected to {edges.filter(([a, b]) => a === hover.id || b === hover.id).length} entities across the network.</div>
-              </motion.div>
-            )}
+      {documents.isSuccess && docs.length === 0 && (
+        <GlassCard>
+          <div className="py-12 text-center">
+            <FileText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+            <div className="text-sm font-medium">Nothing to graph yet</div>
+            <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">Upload documents first — the graph is built from entities extracted out of them.</p>
+            <Link to="/upload" className="mt-4 inline-flex rounded-full bg-aurora px-4 py-1.5 text-xs font-medium text-white">Upload documents</Link>
           </div>
         </GlassCard>
+      )}
 
-        <div className="space-y-4">
-          <GlassCard>
-            <h3 className="mb-3 text-sm font-semibold">Legend</h3>
-            <ul className="space-y-2 text-sm">
-              {Object.entries(typeColor).map(([k, c]) => (
-                <li key={k} className="flex items-center gap-2">
-                  <span className="h-3 w-3 rounded-full" style={{ background: c, boxShadow: `0 0 10px ${c}` }} />
-                  <span className="capitalize">{k}</span>
-                </li>
-              ))}
-            </ul>
-          </GlassCard>
-          <GlassCard>
-            <h3 className="mb-3 text-sm font-semibold">Network stats</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Nodes</span><span>{nodes.length}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Edges</span><span>{edges.length}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Clusters</span><span>3</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Density</span><span>0.42</span></div>
+      {activeId && graph.isLoading && (
+        <GlassCard>
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Building the graph…
+          </div>
+        </GlassCard>
+      )}
+
+      {graph.isError && (
+        <GlassCard className="border-amber-400/30">
+          <div className="py-8 text-center">
+            <Network className="mx-auto mb-3 h-8 w-8 text-amber-300" />
+            <div className="text-sm font-medium text-amber-100">Knowledge graph unavailable</div>
+            <p className="mx-auto mt-2 max-w-lg text-xs text-amber-200/80">{graph.error.userMessage}</p>
+            <p className="mx-auto mt-3 max-w-lg text-[11px] text-muted-foreground">
+              Entity and relationship extraction needs a graph store, which this deployment does not run. Search and the AI workspace are unaffected — they retrieve straight from the vector index.
+            </p>
+            <div className="mt-4 flex justify-center gap-2">
+              <Link to="/search" className="rounded-full bg-aurora px-4 py-1.5 text-xs font-medium text-white">Search instead</Link>
+              <Link to="/workspace" className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs">Ask the AI</Link>
             </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {graph.data && (
+        <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+          <GlassCard className="p-0">
+            <div className="border-b border-white/10 px-5 py-3 text-sm font-semibold">
+              {graph.data.nodes.length} entit{graph.data.nodes.length === 1 ? "y" : "ies"} · {graph.data.edges.length} relationship{graph.data.edges.length === 1 ? "" : "s"}
+            </div>
+            {graph.data.nodes.length === 0 ? (
+              <p className="px-5 py-16 text-center text-sm text-muted-foreground">No entities were extracted from this document.</p>
+            ) : (
+              <svg viewBox="0 0 400 400" className="h-[420px] w-full">
+                {graph.data.edges.map((edge, i) => {
+                  const from = positionOf(edge.source_id);
+                  const to = positionOf(edge.target_id);
+                  if (!from || !to) return null;
+                  return (
+                    <g key={i}>
+                      <line x1={from.x} y1={from.y} x2={to.x} y2={to.y} stroke="rgba(255,255,255,0.15)" strokeWidth={1.5} />
+                      <text x={(from.x + to.x) / 2} y={(from.y + to.y) / 2 - 4} fill="rgba(255,255,255,0.45)" fontSize={8} textAnchor="middle">
+                        {edge.relation_type?.toLowerCase().replace(/_/g, " ")}
+                      </text>
+                    </g>
+                  );
+                })}
+                {layout.map(({ node, x, y }) => (
+                  <g key={node.entity_id}>
+                    <circle cx={x} cy={y} r={9} fill={colorFor(node.type)} opacity={0.9} />
+                    <text x={x} y={y + 22} fill="rgba(255,255,255,0.8)" fontSize={9} textAnchor="middle">{node.name}</text>
+                  </g>
+                ))}
+              </svg>
+            )}
           </GlassCard>
+
           <GlassCard>
-            <h3 className="mb-2 text-sm font-semibold">AI observations</h3>
-            <p className="text-xs text-muted-foreground">Alstom is a critical-path vendor — central to 4 active contracts. Loss of this node would impact Engineering and Safety simultaneously.</p>
+            <h3 className="mb-3 text-sm font-semibold">Entities</h3>
+            {graph.data.nodes.length === 0 ? (
+              <p className="text-xs text-muted-foreground">None extracted.</p>
+            ) : (
+              <ul className="space-y-2">
+                {graph.data.nodes.map((node) => (
+                  <li key={node.entity_id} className="rounded-xl bg-white/[0.03] px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm">{node.name}</span>
+                      <MetroPill color={colorFor(node.type)}>{node.type?.toLowerCase()}</MetroPill>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </GlassCard>
         </div>
-      </div>
+      )}
     </PageShell>
   );
 }

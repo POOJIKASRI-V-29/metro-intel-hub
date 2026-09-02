@@ -41,8 +41,12 @@ class TextCleaner:
         self.config = config or CleanerConfig()
         
         # Pre-compile regular expressions once during initialization to optimize high-volume iterations
-        # Matches non-printable control characters (ASCII 0-31, 127-159)
-        self._control_char_regex = re.compile(r"[\x00-\x1F\x7F-\x9F]")
+        # Matches non-printable control characters (ASCII 0-31, 127-159), deliberately
+        # sparing tab (\x09), newline (\x0A) and carriage return (\x0D): those carry the
+        # document's line structure, which the hyphen re-stitching, paragraph-collapsing
+        # and per-line whitespace steps below all operate on. Stripping them here would
+        # silently glue the last word of every line to the first word of the next.
+        self._control_char_regex = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]")
         # Matches multiple consecutive white-space or tab layouts
         self._whitespace_regex = re.compile(r"[ \t]+")
         # Matches excessive vertical newline spaces to keep paragraphs tight

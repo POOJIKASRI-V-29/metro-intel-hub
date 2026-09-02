@@ -1,221 +1,203 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { useMemo } from "react";
 import { GlassCard, PageShell, Stat, MetroPill } from "@/components/ui-bits";
-import { Sparkles, FileText, Search as SearchIcon, Building2, AlertTriangle, TrendingUp, Plus, Upload, MessageSquare, Network, Calendar, Flame } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import { Sparkles, FileText, Search as SearchIcon, Building2, AlertTriangle, Upload, MessageSquare, Network, Loader2 } from "lucide-react";
+import { useDocuments, useHealth } from "@/lib/api/hooks";
+import { API_BASE_URL } from "@/lib/api/client";
+import type { DocumentSummary } from "@/lib/api/types";
 
 export const Route = createFileRoute("/")({
   head: () => ({ meta: [{ title: "Command Center — KMRL DocIntel" }, { name: "description", content: "AI command center for Kochi Metro document intelligence." }] }),
   component: Dashboard,
 });
 
-const departments = [
-  { name: "Operations", count: 3120, color: "var(--electric)" },
-  { name: "Engineering", count: 2845, color: "var(--cyan-glow)" },
-  { name: "Safety", count: 1890, color: "var(--purple-glow)" },
-  { name: "Procurement", count: 1432, color: "#ff6b9d" },
-  { name: "HR", count: 980, color: "#7cffb2" },
-  { name: "Finance", count: 1280, color: "#ffb84d" },
-];
+const palette = ["var(--electric)", "var(--cyan-glow)", "var(--purple-glow)", "#ff6b9d", "#7cffb2", "#ffb84d"];
 
-const recentUploads = [
-  { name: "Aluva–Pettah signalling audit", dept: "Engineering", time: "2m ago", risk: "low" },
-  { name: "Q2 vendor compliance — Alstom", dept: "Procurement", time: "18m ago", risk: "medium" },
-  { name: "Coach C-08 incident report", dept: "Safety", time: "1h ago", risk: "high" },
-  { name: "Tariff revision proposal v3", dept: "Finance", time: "3h ago", risk: "low" },
-  { name: "Track-3 metallurgy lab results", dept: "Engineering", time: "5h ago", risk: "low" },
-];
+function departmentOf(doc: DocumentSummary): string {
+  const value = doc.metadata?.department;
+  return typeof value === "string" ? value : "Unattributed";
+}
 
-const insights = [
-  { title: "12 contracts expire within 30 days", body: "Renegotiation window suggested for 4 high-value vendor agreements." },
-  { title: "Safety incidents trending up 14%", body: "Cluster detected near Edappally — recommend on-site audit this week." },
-  { title: "Duplicate uploads detected", body: "27 near-duplicate engineering drawings consolidated automatically." },
-];
-
-const deadlines = [
-  { label: "Track-3 inspection sign-off", date: "Jun 24", urgent: true },
-  { label: "Alstom signalling AMC renewal", date: "Jun 28", urgent: true },
-  { label: "Annual safety audit submission", date: "Jul 02", urgent: false },
-  { label: "Vendor compliance report", date: "Jul 10", urgent: false },
-];
-
-const keywords = ["track-3", "signalling", "AMC", "incident", "tender-2026", "ridership", "Q2-budget", "Edappally", "OHE", "rolling-stock"];
-
-function Heatmap() {
-  return (
-    <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(26, minmax(0,1fr))" }}>
-      {Array.from({ length: 7 * 26 }).map((_, i) => {
-        const v = ((i * 73 + 13) % 100) / 100;
-        const op = v < 0.3 ? 0.08 : v < 0.6 ? 0.25 : v < 0.85 ? 0.55 : 0.9;
-        return <div key={i} className="aspect-square rounded-[3px]" style={{ background: `oklch(0.66 0.21 260 / ${op})` }} />;
-      })}
-    </div>
-  );
+/** Coarse relative time — enough for "when was this ingested" without a date library. */
+function relativeTime(iso: string | null): string {
+  if (!iso) return "time unknown";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "time unknown";
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 function Dashboard() {
+  const documents = useDocuments();
+  const health = useHealth();
+
+  const docs = useMemo(() => documents.data?.documents ?? [], [documents.data]);
+  const totalChunks = docs.reduce((sum, d) => sum + d.chunk_count, 0);
+
+  const departments = useMemo(() => {
+    const counts = new Map<string, number>();
+    docs.forEach((d) => counts.set(departmentOf(d), (counts.get(departmentOf(d)) ?? 0) + 1));
+    return Array.from(counts, ([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .map((entry, i) => ({ ...entry, color: palette[i % palette.length] }));
+  }, [docs]);
+
+  const recent = useMemo(
+    () => [...docs].sort((a, b) => (b.upload_date ?? "").localeCompare(a.upload_date ?? "")).slice(0, 5),
+    [docs],
+  );
+
+  const offline = health.isError || documents.error?.isUnreachable;
+  // The query has produced an answer, one way or the other.
+  const settled = documents.isSuccess || documents.isError;
+  const largest = docs.reduce<DocumentSummary | null>((best, d) => (!best || d.chunk_count > best.chunk_count ? d : best), null);
+
   return (
-    <PageShell title="Command Center" subtitle="Live intelligence across every document, department and decision at KMRL.">
-      {/* Hero AI banner */}
+    <PageShell title="Command Center" subtitle="Everything indexed across the KMRL document network, and what you can ask of it.">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
         className="glass-strong relative mb-6 overflow-hidden rounded-[2rem] p-8">
         <div className="absolute inset-0 -z-10 opacity-60" style={{ background: "var(--grad-cosmic)" }} />
-        <div className="absolute right-6 top-6 flex gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Live · v2.6</span>
+        <div className="absolute right-6 top-6 flex items-center gap-1.5">
+          <span className={`h-1.5 w-1.5 rounded-full ${offline ? "bg-amber-400" : "bg-emerald-400 animate-pulse"}`} />
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{offline ? "Backend offline" : "Connected"}</span>
         </div>
         <div className="flex items-start gap-4">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-aurora glow-ring">
             <Sparkles className="h-6 w-6 text-white" />
           </div>
           <div className="flex-1">
-            <div className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">Good morning, Commander</div>
-            <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">Your network processed <span className="text-gradient">2,847 documents</span> overnight.</h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">3 require immediate review · 12 contract renewals queued · AI confidence 96.4%</p>
+            <div className="text-[11px] uppercase tracking-[0.25em] text-muted-foreground">KMRL Document Intelligence</div>
+            {documents.isLoading ? (
+              <h2 className="mt-1 flex items-center gap-2 text-2xl font-semibold sm:text-3xl">
+                <Loader2 className="h-5 w-5 animate-spin" /> Reading the index…
+              </h2>
+            ) : offline ? (
+              <>
+                <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">The document backend is <span className="text-gradient">not reachable</span>.</h2>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  Tried <code className="rounded bg-black/30 px-1">{API_BASE_URL}</code>. Start the API, or point <code className="rounded bg-black/30 px-1">VITE_API_URL</code> at a running instance.
+                </p>
+              </>
+            ) : docs.length === 0 ? (
+              <>
+                <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">Your index is <span className="text-gradient">empty</span>.</h2>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Upload a document and it becomes searchable, and the AI can answer questions grounded in it.</p>
+              </>
+            ) : (
+              <>
+                <h2 className="mt-1 text-2xl font-semibold sm:text-3xl">
+                  <span className="text-gradient">{documents.data?.truncated ? "At least " : ""}{docs.length} document{docs.length === 1 ? "" : "s"}</span> indexed and searchable.
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  {totalChunks} retrievable passage{totalChunks === 1 ? "" : "s"} across {departments.length} department{departments.length === 1 ? "" : "s"}
+                  {recent[0]?.upload_date ? ` · most recent ingest ${relativeTime(recent[0].upload_date)}` : ""}
+                </p>
+              </>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               <Link to="/workspace" className="rounded-full bg-aurora px-4 py-2 text-sm font-medium text-white">Ask the AI</Link>
               <Link to="/explorer" className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm">Explore corpus</Link>
+              <Link to="/upload" className="rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm">Upload</Link>
             </div>
           </div>
         </div>
-        <div className="metro-line mt-6 h-px w-full" />
       </motion.div>
 
-      {/* Stats */}
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Total documents" value="48,392" delta="+342 today" accent="var(--electric)" />
-        <Stat label="AI searches today" value="1,284" delta="↑ 22% vs yesterday" accent="var(--cyan-glow)" />
-        <Stat label="Active departments" value="14" delta="All synced" accent="var(--purple-glow)" />
-        <Stat label="Risk alerts" value="7" delta="2 critical" accent="#ff6b6b" />
+        {/* Until the index has actually been read, these are unknown — not zero. The
+            server renders this markup before any fetch, so a literal 0 here would show
+            every visitor "0 documents indexed" for as long as the request takes. */}
+        <Stat label="Documents indexed" value={settled ? docs.length.toLocaleString() : "—"} accent="var(--electric)" />
+        <Stat label="Retrievable chunks" value={settled ? totalChunks.toLocaleString() : "—"} accent="var(--cyan-glow)" />
+        <Stat label="Departments" value={settled ? departments.length.toLocaleString() : "—"} accent="var(--purple-glow)" />
+        <Stat label="Largest document" value={largest ? `${largest.chunk_count} chunks` : "—"} accent="#ffb84d" />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* Recent uploads timeline */}
-        <GlassCard className="lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Recent uploads · Timeline</h3>
-            <MetroPill>Auto-classified</MetroPill>
-          </div>
-          <ol className="relative space-y-4 border-l border-white/10 pl-6">
-            {recentUploads.map((u, i) => (
-              <motion.li key={u.name} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}>
-                <span className="absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full bg-aurora glow-ring" />
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{u.name}</div>
-                    <div className="text-xs text-muted-foreground">{u.dept} · {u.time}</div>
-                  </div>
-                  <MetroPill color={u.risk === "high" ? "#ff6b6b" : u.risk === "medium" ? "#ffb84d" : "var(--cyan-glow)"}>{u.risk} risk</MetroPill>
-                </div>
-              </motion.li>
-            ))}
-          </ol>
-        </GlassCard>
-
-        {/* Dept distribution */}
-        <GlassCard>
-          <h3 className="mb-4 text-lg font-semibold">Department distribution</h3>
-          <div className="space-y-3">
-            {departments.map((d) => {
-              const max = Math.max(...departments.map((x) => x.count));
-              const pct = (d.count / max) * 100;
-              return (
-                <div key={d.name}>
-                  <div className="mb-1 flex justify-between text-xs">
-                    <span>{d.name}</span>
-                    <span className="text-muted-foreground">{d.count.toLocaleString()}</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
-                    <motion.div initial={{ width: 0 }} whileInView={{ width: `${pct}%` }} viewport={{ once: true }} transition={{ duration: 1, ease: "easeOut" }} className="h-full rounded-full" style={{ background: d.color, boxShadow: `0 0 12px ${d.color}` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </GlassCard>
-
-        {/* AI insights */}
-        <GlassCard className="lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-accent" /> AI Insights</h3>
-            <MetroPill color="var(--purple-glow)">Updated 2m ago</MetroPill>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {insights.map((i) => (
-              <motion.div key={i.title} whileHover={{ y: -3 }} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <div className="mb-2 text-sm font-semibold text-gradient">{i.title}</div>
-                <div className="text-xs text-muted-foreground">{i.body}</div>
-              </motion.div>
-            ))}
-          </div>
-        </GlassCard>
-
-        {/* Smart recommendations */}
-        <GlassCard>
-          <h3 className="mb-4 text-lg font-semibold">Smart recommendations</h3>
-          <ul className="space-y-3 text-sm">
-            <li className="flex items-start gap-2"><TrendingUp className="mt-0.5 h-4 w-4 text-accent" />Re-index 412 legacy PDFs for semantic search.</li>
-            <li className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 text-amber-400" />Review 3 expiring NDAs before month end.</li>
-            <li className="flex items-start gap-2"><Network className="mt-0.5 h-4 w-4 text-cyan-300" />Connect signalling vendor records to incident logs.</li>
-          </ul>
-        </GlassCard>
-
-        {/* Heatmap */}
-        <GlassCard className="lg:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold flex items-center gap-2"><Flame className="h-4 w-4 text-accent" /> Activity heatmap · 6 months</h3>
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-              less <span className="ml-1 h-2 w-2 rounded-sm" style={{ background: "oklch(0.66 0.21 260 / 0.1)" }} />
-              <span className="h-2 w-2 rounded-sm" style={{ background: "oklch(0.66 0.21 260 / 0.4)" }} />
-              <span className="h-2 w-2 rounded-sm" style={{ background: "oklch(0.66 0.21 260 / 0.7)" }} />
-              <span className="h-2 w-2 rounded-sm" style={{ background: "oklch(0.66 0.21 260 / 0.95)" }} /> more
+      {documents.isError && !offline && (
+        <GlassCard className="mb-6 border-amber-400/30">
+          <div className="flex items-start gap-2 py-2 text-sm text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-medium">Could not load the index</div>
+              <p className="mt-1 text-xs text-amber-200/80">{documents.error.userMessage}</p>
             </div>
           </div>
-          <Heatmap />
         </GlassCard>
+      )}
 
-        {/* Deadlines */}
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <GlassCard>
-          <h3 className="mb-4 text-lg font-semibold flex items-center gap-2"><Calendar className="h-4 w-4 text-accent" /> Upcoming deadlines</h3>
-          <ul className="space-y-3">
-            {deadlines.map((d) => (
-              <li key={d.label} className="flex items-center justify-between rounded-xl bg-white/[0.03] p-3">
-                <span className="text-sm">{d.label}</span>
-                <span className={`text-xs ${d.urgent ? "text-rose-300" : "text-muted-foreground"}`}>{d.date}</span>
-              </li>
-            ))}
-          </ul>
+          <h3 className="mb-1 flex items-center gap-2 text-lg font-semibold"><FileText className="h-4 w-4" /> Recent ingests</h3>
+          <p className="mb-4 text-xs text-muted-foreground">Newest first, by the time the document entered the index.</p>
+          {recent.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 p-8 text-center">
+              <Upload className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">No documents yet.</p>
+              <Link to="/upload" className="mt-3 inline-flex rounded-full bg-aurora px-4 py-1.5 text-xs font-medium text-white">Upload the first one</Link>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {recent.map((d) => (
+                <li key={d.document_id}>
+                  <Link to="/document/$id" params={{ id: d.document_id }} className="flex items-center justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2.5 hover:bg-white/[0.06]">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium">{d.filename}</div>
+                      <div className="text-[11px] text-muted-foreground">{d.chunk_count} chunk{d.chunk_count === 1 ? "" : "s"}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <MetroPill>{departmentOf(d)}</MetroPill>
+                      <span className="text-[11px] text-muted-foreground">{relativeTime(d.upload_date)}</span>
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </GlassCard>
 
-        {/* Trending keywords */}
-        <GlassCard className="lg:col-span-3">
-          <h3 className="mb-4 text-lg font-semibold">Trending keywords</h3>
-          <div className="flex flex-wrap gap-2">
-            {keywords.map((k, i) => (
-              <motion.span key={k} initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: i * 0.03 }}
-                className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm transition hover:border-cyan-300/40 hover:bg-cyan-300/10">
-                #{k}
-              </motion.span>
-            ))}
-          </div>
-        </GlassCard>
-      </div>
+        <div className="space-y-4">
+          <GlassCard>
+            <h3 className="mb-1 flex items-center gap-2 text-lg font-semibold"><Building2 className="h-4 w-4" /> By department</h3>
+            <p className="mb-4 text-xs text-muted-foreground">From the metadata attached at upload.</p>
+            {departments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Nothing indexed yet.</p>
+            ) : (
+              <ul className="space-y-2.5">
+                {departments.map((d) => (
+                  <li key={d.name}>
+                    <div className="mb-1 flex items-center justify-between text-xs">
+                      <span>{d.name}</span>
+                      <span className="text-muted-foreground">{d.count}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-white/5">
+                      <div className="h-full rounded-full" style={{ width: `${(d.count / docs.length) * 100}%`, background: d.color }} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </GlassCard>
 
-      {/* Floating quick actions */}
-      <div className="fixed bottom-6 right-6 z-40 flex flex-col gap-3">
-        {[
-          { icon: Upload, to: "/upload", label: "Upload" },
-          { icon: MessageSquare, to: "/workspace", label: "Ask AI" },
-          { icon: SearchIcon, to: "/explorer", label: "Explore" },
-        ].map((a) => (
-          <Link key={a.label} to={a.to} className="group glass-strong flex h-12 w-12 items-center justify-center rounded-full transition hover:w-32 hover:bg-aurora">
-            <a.icon className="h-5 w-5" />
-            <span className="ml-2 hidden text-xs group-hover:inline">{a.label}</span>
-          </Link>
-        ))}
-        <button className="grid h-14 w-14 place-items-center rounded-full bg-aurora glow-ring">
-          <Plus className="h-6 w-6 text-white" />
-        </button>
+          <GlassCard>
+            <h3 className="mb-3 text-sm font-semibold">Jump to</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { to: "/search", icon: SearchIcon, label: "Search" },
+                { to: "/workspace", icon: MessageSquare, label: "Ask AI" },
+                { to: "/explorer", icon: FileText, label: "Explorer" },
+                { to: "/graph", icon: Network, label: "Graph" },
+              ].map((item) => (
+                <Link key={item.label} to={item.to} className="flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2.5 text-sm hover:bg-white/[0.06]">
+                  <item.icon className="h-4 w-4 text-muted-foreground" /> {item.label}
+                </Link>
+              ))}
+            </div>
+          </GlassCard>
+        </div>
       </div>
     </PageShell>
   );

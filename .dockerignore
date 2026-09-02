@@ -1,0 +1,16 @@
+.git/
+.venv/
+venv/
+frontend/
+data/
+samples/
+.claude/
+__pycache__/
+**/__pycache__/
+*.pyc
+.env
+.env.local
+*.log
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

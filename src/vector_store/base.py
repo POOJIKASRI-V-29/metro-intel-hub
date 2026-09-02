@@ -22,7 +22,13 @@ class SearchFilter(BaseModel):
     Example: To search only within a specific file: SearchFilter(key="document_id", value="123-456")
     """
     key: str = Field(..., description="The metadata payload field name to apply the filtering rule against.")
-    value: Any = Field(..., description="The exact literal target value to match during lookup constraints.")
+    value: Any = Field(
+        ...,
+        description=(
+            "The target value to match during lookup constraints: a scalar for an exact "
+            "match, or a list/tuple/set for an any-of match across several values."
+        ),
+    )
 
 
 class SearchResult(BaseModel):
