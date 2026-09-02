@@ -55,7 +55,7 @@ class PdfParser:
             parsed_pages: List[ParsedPage] = []
             
             # Context manager for the fitz document to guarantee memory cleanup
-            with fitz.open(streamtype="pdf", stream=stream_bytes) as doc:
+            with fitz.open(stream=stream_bytes, filetype="pdf") as doc:
                 if doc.is_encrypted:
                     logger.error("PDF parsing failed: Document is password protected or encrypted.")
                     raise ValueError("Cannot parse encrypted PDF documents.")

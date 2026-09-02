@@ -6,6 +6,7 @@ parsing, cleaning, chunking, embedding, and vector storage into a single transac
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import BinaryIO, Dict, Any
 
 # Import orchestrators from all previous stages
@@ -60,11 +61,12 @@ class DocumentUploadPipeline:
         self.vector_store = vector_store
         self.target_collection = target_collection
         
-        # Ensure the destination collection exists in the vector store before processing begins
-        # We assume an embedding size of 1024 (matching BAAI/bge-large-en-v1.5 defaults)
+        # Ensure the destination collection exists in the vector store before processing
+        # begins. The vector size comes from the loaded embedding model, so switching
+        # EMBEDDING_MODEL_NAME cannot silently create a mismatched collection.
         self.vector_store.create_collection(
             collection_name=self.target_collection,
-            vector_size=1024,
+            vector_size=self.embedder.dimension,
             distance_metric="Cosine"
         )
 
@@ -112,12 +114,18 @@ class DocumentUploadPipeline:
             # Step 5: Vector Database Upsertion
             logger.debug("Step 5: Upserting vectors to storage...")
             
-            # Compile global metadata applying to all chunks in this document
-            base_metadata = user_metadata or {}
+            # Compile global metadata applying to all chunks in this document. Copy the
+            # caller's dict rather than mutating it: the upload route echoes the same
+            # object back as `metadata_attached`, which would otherwise report the
+            # pipeline's own system fields as user-supplied metadata.
+            base_metadata = dict(user_metadata or {})
             base_metadata.update({
                 "document_id": unified_doc.document_id,
                 "filename": unified_doc.filename,
-                "extension": unified_doc.extension
+                "extension": unified_doc.extension,
+                # Chunks are the only record a document has, so the ingestion time has to
+                # live on them: listing and recency views have no other source for it.
+                "upload_date": datetime.now(timezone.utc).isoformat()
             })
             
             success = self.vector_store.upsert_chunks(

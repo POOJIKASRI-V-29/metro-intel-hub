@@ -1,143 +1,188 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { PageShell, GlassCard, MetroPill } from "@/components/ui-bits";
 import { motion } from "motion/react";
-import { FileText, Download, Share2, Star, Sparkles, ListChecks, ShieldAlert } from "lucide-react";
+import { useMemo, useState } from "react";
+import { GlassCard, PageShell, MetroPill } from "@/components/ui-bits";
+import { FileText, Sparkles, ArrowLeft, AlertTriangle, Loader2, Send, MessageSquare } from "lucide-react";
+import { useChatSession, useDocumentMetadata, useDocuments, useRecommendations } from "@/lib/api/hooks";
 
 export const Route = createFileRoute("/document/$id")({
-  head: ({ params }) => ({ meta: [{ title: `Document #${params.id} — KMRL DocIntel` }, { name: "description", content: "Document detail with AI summary and intelligence." }] }),
-  component: DocumentPage,
+  head: () => ({ meta: [{ title: "Document — KMRL DocIntel" }, { name: "description", content: "Document detail, metadata and grounded Q&A." }] }),
+  component: DocumentDetail,
 });
 
-function DocumentPage() {
+function DocumentDetail() {
   const { id } = Route.useParams();
-  return (
-    <PageShell title="Aluva–Pettah Signalling Audit Q2" subtitle={`Document #${id} · Engineering · 4.2 MB · Updated Jun 18, 2026`}
-      action={
-        <div className="flex gap-2">
-          <button className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs"><Star className="h-3.5 w-3.5" /> Favorite</button>
-          <button className="glass flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs"><Share2 className="h-3.5 w-3.5" /> Share</button>
-          <button className="flex items-center gap-1.5 rounded-full bg-aurora px-3 py-1.5 text-xs text-white"><Download className="h-3.5 w-3.5" /> Download</button>
-        </div>
-      }
-    >
-      <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        {/* Preview */}
-        <GlassCard className="p-0">
-          <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
-            <div className="flex items-center gap-2 text-sm"><FileText className="h-4 w-4" /> Preview</div>
-            <div className="flex gap-1.5">
-              <MetroPill color="var(--cyan-glow)">PDF</MetroPill>
-              <MetroPill color="var(--purple-glow)">v3.1</MetroPill>
-            </div>
-          </div>
-          <div className="relative grid h-[640px] place-items-center overflow-hidden">
-            <div className="absolute inset-0 grid-bg opacity-30" />
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-              className="relative aspect-[1/1.3] w-[70%] max-w-[460px] rounded-2xl bg-white p-8 text-black shadow-2xl">
-              <div className="mb-4 text-[10px] uppercase tracking-widest text-gray-500">KMRL · Engineering Division</div>
-              <h2 className="text-xl font-bold leading-tight">Aluva–Pettah Signalling System Audit Report</h2>
-              <div className="mt-1 text-xs text-gray-500">Quarter 2 · 2026</div>
-              <div className="mt-6 space-y-2">
-                {Array.from({ length: 14 }).map((_, i) => <div key={i} className="h-1.5 rounded bg-gray-200" style={{ width: `${60 + (i % 5) * 8}%` }} />)}
-              </div>
-              <div className="mt-6 grid grid-cols-3 gap-2">
-                <div className="h-16 rounded bg-blue-50" />
-                <div className="h-16 rounded bg-amber-50" />
-                <div className="h-16 rounded bg-emerald-50" />
-              </div>
-            </motion.div>
+  const [input, setInput] = useState("");
+
+  const documents = useDocuments();
+  const metadata = useDocumentMetadata(id);
+  const related = useRecommendations(id);
+  // Every turn here is scoped to this document, so answers can only come from it.
+  const chat = useChatSession([id]);
+
+  const summary = useMemo(
+    () => documents.data?.documents.find((d) => d.document_id === id) ?? null,
+    [documents.data, id],
+  );
+
+  const notFound = metadata.error?.status === 404 || (documents.isSuccess && !summary);
+  const title = summary?.filename ?? metadata.data?.title ?? "Document";
+
+  const send = (text: string) => {
+    if (!text.trim() || chat.isThinking) return;
+    chat.send(text);
+    setInput("");
+  };
+
+  if (notFound) {
+    return (
+      <PageShell title="Document not found">
+        <GlassCard>
+          <div className="py-12 text-center">
+            <AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-300" />
+            <div className="text-sm font-medium">Nothing indexed under this id</div>
+            <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
+              The document <code className="rounded bg-black/30 px-1">{id}</code> is not in the vector store. It may have been removed, or the index rebuilt.
+            </p>
+            <Link to="/explorer" className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-aurora px-4 py-1.5 text-xs font-medium text-white">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to explorer
+            </Link>
           </div>
         </GlassCard>
+      </PageShell>
+    );
+  }
+
+  return (
+    <PageShell
+      title={title}
+      subtitle={summary ? `${summary.chunk_count} indexed passage${summary.chunk_count === 1 ? "" : "s"} · ${summary.extension?.replace(".", "").toUpperCase() ?? "file"}` : undefined}
+      action={
+        <Link to="/explorer" className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs">
+          <ArrowLeft className="h-3.5 w-3.5" /> Explorer
+        </Link>
+      }
+    >
+      <div className="grid gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="space-y-4">
+          <GlassCard>
+            <h3 className="mb-1 flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-4 w-4 text-accent" /> Ask this document</h3>
+            <p className="mb-4 text-xs text-muted-foreground">Retrieval is scoped to this document, so every answer is grounded in it alone.</p>
+
+            <div className="space-y-4">
+              {chat.messages.map((m, i) => (
+                <motion.div key={i} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                  className={`flex gap-3 ${m.role === "user" ? "justify-end" : ""}`}>
+                  <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
+                    m.role === "user" ? "bg-aurora text-white"
+                      : m.failed ? "border border-amber-400/30 bg-amber-400/10 text-amber-100"
+                      : "border border-white/10 bg-white/[0.04]"
+                  }`}>
+                    <div className="whitespace-pre-wrap leading-relaxed">{m.content}</div>
+                    {m.usage && <div className="mt-2 text-[10px] uppercase tracking-wider text-muted-foreground">{m.usage.total_tokens.toLocaleString()} tokens</div>}
+                  </div>
+                </motion.div>
+              ))}
+
+              {chat.isThinking && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Reading this document…
+                </div>
+              )}
+
+              {chat.messages.length === 0 && !chat.isThinking && (
+                <div className="flex flex-wrap gap-2">
+                  {["Summarise this document.", "What actions does it require, and who owns them?", "What risks does it identify?"].map((q) => (
+                    <button key={q} onClick={() => send(q)}
+                      className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-muted-foreground transition hover:border-cyan-300/30 hover:text-foreground">
+                      ↳ {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="glass-strong mt-4 flex items-end gap-2 rounded-2xl p-2">
+              <textarea
+                value={input} onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input); } }}
+                rows={1} placeholder="Ask about this document…" disabled={chat.isThinking}
+                className="max-h-32 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+              />
+              <button onClick={() => send(input)} disabled={chat.isThinking || !input.trim()}
+                className="grid h-9 w-9 place-items-center rounded-xl bg-aurora disabled:opacity-40">
+                {chat.isThinking ? <Loader2 className="h-4 w-4 animate-spin text-white" /> : <Send className="h-4 w-4 text-white" />}
+              </button>
+            </div>
+          </GlassCard>
+        </div>
 
         <div className="space-y-4">
           <GlassCard>
-            <h3 className="mb-2 flex items-center gap-2 text-lg font-semibold"><Sparkles className="h-4 w-4 text-accent" /> AI Summary</h3>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Q2 audit of the Aluva–Pettah signalling corridor identified <span className="text-foreground">12 intermittent ATP faults</span> traced to firmware mismatches on rev 4.2 OBUs, plus <span className="text-foreground">4 monsoon-related aspect anomalies</span> at Edappally. Vendor AMC continuity is the top risk vector. Overall corridor reliability stands at <span className="text-gradient font-semibold">98.7%</span>.
-            </p>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><FileText className="h-4 w-4" /> Metadata</h3>
+            {metadata.isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…</div>}
+            {metadata.isError && metadata.error.status !== 404 && (
+              <p className="text-xs text-amber-200">{metadata.error.userMessage}</p>
+            )}
+            {metadata.data && (
+              <dl className="space-y-2 text-xs">
+                {[
+                  ["Filename", summary?.filename ?? null],
+                  ["Title", metadata.data.title],
+                  ["Author", metadata.data.author],
+                  ["Created", metadata.data.creation_date],
+                  ["Indexed", summary?.upload_date ? new Date(summary.upload_date).toLocaleString() : null],
+                  ["Chunks", (metadata.data.chunk_count ?? summary?.chunk_count)?.toString() ?? null],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className={`text-right ${value ? "" : "text-muted-foreground/40"}`}>{value ?? "not recorded"}</dd>
+                  </div>
+                ))}
+                {Object.entries(metadata.data.custom_attributes ?? {}).map(([key, value]) => (
+                  <div key={key} className="flex items-start justify-between gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <dt className="text-muted-foreground">{key}</dt>
+                    <dd className="text-right">{String(value)}</dd>
+                  </div>
+                ))}
+                {metadata.data.keywords?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {metadata.data.keywords.map((k) => <span key={k} className="rounded-full bg-white/5 px-2 py-0.5 text-[10px]">{k}</span>)}
+                  </div>
+                )}
+                {metadata.data.note && <p className="pt-1 text-[11px] text-muted-foreground">{metadata.data.note}</p>}
+              </dl>
+            )}
           </GlassCard>
 
           <GlassCard>
-            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold"><ShieldAlert className="h-4 w-4 text-amber-300" /> Risk Score</h3>
-            <div className="flex items-center gap-4">
-              <div className="relative h-20 w-20">
-                <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-                  <circle cx="50" cy="50" r="42" stroke="oklch(1 0 0 / 0.06)" strokeWidth="10" fill="none" />
-                  <circle cx="50" cy="50" r="42" stroke="oklch(0.75 0.18 50)" strokeWidth="10" fill="none" strokeDasharray={`${2 * Math.PI * 42 * 0.62} ${2 * Math.PI * 42}`} strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 grid place-items-center"><span className="font-display text-xl font-bold">62</span></div>
-              </div>
-              <div>
-                <div className="text-sm font-medium">Moderate</div>
-                <div className="text-xs text-muted-foreground">Requires review within 7 days</div>
-              </div>
-            </div>
-          </GlassCard>
-
-          <GlassCard>
-            <h3 className="mb-3 flex items-center gap-2 text-lg font-semibold"><ListChecks className="h-4 w-4 text-accent" /> AI Action Items</h3>
-            <ul className="space-y-2 text-sm">
-              {[
-                "Schedule joint review with Engineering + Procurement before Jun 25",
-                "Initiate AMC continuity dialogue with Alstom (contract A-2024-31)",
-                "Deploy firmware patch v4.3 to 38 affected OBUs",
-                "Add monsoon-mode telemetry probes at Edappally junction",
-              ].map((a, i) => (
-                <li key={i} className="flex items-start gap-2 rounded-xl bg-white/[0.03] p-3"><span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-aurora" />{a}</li>
-              ))}
-            </ul>
-          </GlassCard>
-
-          <GlassCard>
-            <h3 className="mb-3 text-sm font-semibold">Metadata</h3>
-            <dl className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                ["Author", "R. Menon"], ["Reviewer", "S. Pillai"], ["Department", "Engineering"],
-                ["Classification", "Internal"], ["Pages", "42"], ["Language", "English"],
-              ].map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-white/[0.03] p-3"><dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</dt><dd className="mt-0.5">{v}</dd></div>
-              ))}
-            </dl>
-          </GlassCard>
-
-          <GlassCard>
-            <h3 className="mb-2 text-sm font-semibold">Keywords</h3>
-            <div className="flex flex-wrap gap-1.5">
-              {["signalling", "ATP", "Aluva", "Pettah", "OBU", "firmware", "monsoon", "Edappally", "AMC", "Alstom", "Q2-2026"].map((k) => (
-                <span key={k} className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-muted-foreground">#{k}</span>
-              ))}
-            </div>
-          </GlassCard>
-
-          <GlassCard>
-            <h3 className="mb-3 text-sm font-semibold">Related documents</h3>
-            <ul className="space-y-2">
-              {[2, 3, 4].map((rid) => (
-                <li key={rid}>
-                  <Link to="/document/$id" params={{ id: String(rid) }} className="flex items-center justify-between rounded-xl bg-white/[0.03] p-2.5 text-sm hover:bg-white/10">
-                    <span>Related document #{rid}</span><span className="text-[11px] text-muted-foreground">96% similar</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </GlassCard>
-
-          <GlassCard>
-            <h3 className="mb-3 text-sm font-semibold">Timeline</h3>
-            <ol className="relative space-y-3 border-l border-white/10 pl-5 text-sm">
-              {[
-                ["Jun 18", "Audit signed off by S. Pillai"],
-                ["Jun 12", "Draft submitted for review"],
-                ["Jun 02", "Field inspection completed"],
-                ["May 24", "Audit initiated"],
-              ].map(([d, t]) => (
-                <li key={d} className="relative">
-                  <span className="absolute -left-[22px] mt-1.5 h-2.5 w-2.5 rounded-full bg-aurora" />
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{d}</div>
-                  <div>{t}</div>
-                </li>
-              ))}
-            </ol>
+            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold"><MessageSquare className="h-4 w-4" /> Related documents</h3>
+            {related.isLoading && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Finding related…</div>}
+            {related.isError && <p className="text-xs text-amber-200">{related.error.userMessage}</p>}
+            {related.data && related.data.recommendations.length === 0 && (
+              <p className="text-xs text-muted-foreground">No related documents found in the index.</p>
+            )}
+            {related.data && related.data.recommendations.length > 0 && (
+              <>
+                <ul className="space-y-2">
+                  {related.data.recommendations.map((r) => (
+                    <li key={r.document_id}>
+                      <Link to="/document/$id" params={{ id: r.document_id }} className="block rounded-xl bg-white/[0.03] px-3 py-2 hover:bg-white/[0.06]">
+                        <div className="truncate text-sm font-medium">{r.title}</div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">{r.recommendation_reason}</div>
+                        <div className="mt-1"><MetroPill color="var(--cyan-glow)">{r.relevance_score.toFixed(3)}</MetroPill></div>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {related.data.keywords_used && related.data.keywords_used.length > 0 && (
+                  <p className="mt-3 text-[11px] text-muted-foreground">
+                    Matched on {related.data.keywords_used.slice(0, 6).join(", ")}
+                    {related.data.keyword_source ? ` (${related.data.keyword_source.replace(/_/g, " ")})` : ""}
+                  </p>
+                )}
+              </>
+            )}
           </GlassCard>
         </div>
       </div>

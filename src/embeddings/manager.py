@@ -47,6 +47,15 @@ class EmbeddingManager:
             logger.exception(f"Fatal error occurred while creating embedding transformer for model: {self.config.model_name}")
             raise RuntimeError(f"Failed to compile embedding asset: {str(error)}") from error
 
+    @property
+    def dimension(self) -> int:
+        """Returns the output dimensionality of the loaded bi-encoder.
+
+        Read from the model itself rather than configuration, so a collection is always
+        provisioned with the vector size the model actually produces.
+        """
+        return int(self._model.get_sentence_embedding_dimension())
+
     def _detect_hardware_target(self) -> str:
         """
         Heuristically targets the fastest executing available physical compute backend.

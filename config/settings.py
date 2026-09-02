@@ -68,7 +68,26 @@ class OCRProvider(str, Enum):
     TESSERACT = "tesseract"
 
 
-class AppSettings(BaseSettings):
+class SectionSettings(BaseSettings):
+    """Common base for every configuration section.
+
+    Each section is an independent `BaseSettings` with its own env prefix, and
+    pydantic-settings resolves each one on its own: a section nested inside `Settings`
+    does *not* inherit the root object's `env_file`. Declaring the file here is what
+    makes a `.env` actually reach the prefixed sections, as `.env.example` and the
+    README promise; without it they would silently read process environment only.
+
+    Subclasses override `env_prefix`; pydantic merges the rest of this config in.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+class AppSettings(SectionSettings):
     """Core application metadata and runtime behaviour.
 
     Attributes:
@@ -101,7 +120,7 @@ class AppSettings(BaseSettings):
         return self
 
 
-class ServerSettings(BaseSettings):
+class ServerSettings(SectionSettings):
     """FastAPI / Uvicorn server and networking configuration.
 
     Attributes:
@@ -142,7 +161,7 @@ class ServerSettings(BaseSettings):
         return value
 
 
-class LLMSettings(BaseSettings):
+class LLMSettings(SectionSettings):
     """LLM provider configuration supporting both Ollama and OpenAI-compatible backends.
 
     The active backend is selected via `active_provider`. Only the fields
@@ -196,7 +215,7 @@ class LLMSettings(BaseSettings):
         return self
 
 
-class EmbeddingSettings(BaseSettings):
+class EmbeddingSettings(SectionSettings):
     """HuggingFace Sentence-Transformers embedding configuration.
 
     Attributes:
@@ -220,7 +239,7 @@ class EmbeddingSettings(BaseSettings):
     vector_dimension: int = Field(default=384, ge=1)
 
 
-class VectorStoreSettings(BaseSettings):
+class VectorStoreSettings(SectionSettings):
     """ChromaDB vector store configuration.
 
     Attributes:
@@ -241,7 +260,7 @@ class VectorStoreSettings(BaseSettings):
     port: Optional[int] = Field(default=None, ge=1, le=65535)
 
 
-class GraphSettings(BaseSettings):
+class GraphSettings(SectionSettings):
     """Neo4j knowledge graph configuration.
 
     Attributes:
@@ -278,7 +297,7 @@ class GraphSettings(BaseSettings):
         return self
 
 
-class OCRSettings(BaseSettings):
+class OCRSettings(SectionSettings):
     """OCR engine configuration used by `ocr/` and `ingestion/image_parser.py`.
 
     Attributes:
@@ -313,7 +332,7 @@ class OCRSettings(BaseSettings):
         return value
 
 
-class ChunkingSettings(BaseSettings):
+class ChunkingSettings(SectionSettings):
     """Text chunking defaults used by `preprocessing/chunker.py`.
 
     Attributes:
@@ -344,7 +363,7 @@ class ChunkingSettings(BaseSettings):
         return self
 
 
-class RetrievalSettings(BaseSettings):
+class RetrievalSettings(SectionSettings):
     """Hybrid retrieval and re-ranking defaults used by `retrieval/`.
 
     Attributes:
@@ -390,7 +409,7 @@ class RetrievalSettings(BaseSettings):
         return self
 
 
-class UploadSettings(BaseSettings):
+class UploadSettings(SectionSettings):
     """File upload constraints used by `ingestion/validator.py` and the upload route.
 
     Attributes:
@@ -433,7 +452,7 @@ class UploadSettings(BaseSettings):
         return self.max_file_size_mb * 1024 * 1024
 
 
-class LoggingSettings(BaseSettings):
+class LoggingSettings(SectionSettings):
     """Logging level and sink configuration consumed by `config/logging_config.py`.
 
     Attributes:
@@ -472,7 +491,7 @@ class LoggingSettings(BaseSettings):
         return upper_value
 
 
-class FeatureFlagSettings(BaseSettings):
+class FeatureFlagSettings(SectionSettings):
     """Per-capability feature toggles for the KMRL platform.
 
     These flags let individual capabilities be disabled independently of

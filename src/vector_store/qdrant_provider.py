@@ -149,28 +149,33 @@ class QdrantProvider(BaseVectorStore):
         try:
             query_filter = None
             
-            # Map our platform's abstract SearchFilters into Qdrant's exact match conditions
+            # Map our platform's abstract SearchFilters into Qdrant match conditions.
+            # A sequence value means "any of these" (e.g. restricting a chat turn to a
+            # set of document_ids); a scalar means an exact match.
             if filters:
                 must_conditions = []
                 for f in filters:
+                    if isinstance(f.value, (list, tuple, set)):
+                        match = qmodels.MatchAny(any=list(f.value))
+                    else:
+                        match = qmodels.MatchValue(value=f.value)
                     must_conditions.append(
-                        qmodels.FieldCondition(
-                            key=f.key,
-                            match=qmodels.MatchValue(value=f.value)
-                        )
+                        qmodels.FieldCondition(key=f.key, match=match)
                     )
                 query_filter = qmodels.Filter(must=must_conditions)
 
-            raw_results = self.client.search(
+            # `client.search()` was removed in qdrant-client 1.x; `query_points` is the
+            # supported universal query entrypoint and returns a QueryResponse envelope.
+            query_response = self.client.query_points(
                 collection_name=collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 query_filter=query_filter,
                 limit=top_k,
                 with_payload=True  # Ensure we retrieve the stored text back
             )
 
             parsed_results: List[SearchResult] = []
-            for hit in raw_results:
+            for hit in query_response.points:
                 payload = hit.payload or {}
                 
                 # Extract reserved fields, defaulting if payload is unexpectedly malformed
@@ -194,6 +199,98 @@ class QdrantProvider(BaseVectorStore):
         except Exception as error:
             logger.exception(f"Semantic search execution failed on Qdrant collection '{collection_name}'.")
             raise RuntimeError(f"Search failure against vector database.") from error
+
+    def list_documents(
+        self,
+        collection_name: str,
+        max_points: int = 10_000,
+        payload_keys: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Returns one entry per distinct document held in the collection.
+
+        Documents are not stored as first-class records anywhere: the collection holds
+        chunks, each carrying its parent's ``document_id`` and ``filename`` in the
+        payload. This scrolls those payloads and folds them into document-level
+        summaries.
+
+        Args:
+            collection_name: Collection to enumerate.
+            payload_keys: Restrict the scroll to these payload fields. When omitted,
+                every field except the chunk ``text`` is fetched — text is by far the
+                largest field and listing never needs it, so pulling it would mean
+                hauling the entire corpus across the wire on every call.
+            max_points: Safety bound on how many chunks to scan.
+
+        Returns:
+            ``{"documents": [...], "truncated": bool, "scanned_chunks": int}``.
+            ``truncated`` is True when the scan hit ``max_points`` with chunks still
+            unread, meaning the document list is incomplete — callers must surface that
+            rather than presenting a short list as the whole corpus.
+            An absent collection yields an empty, untruncated result.
+        """
+        reserved = {"chunk_id", "text", "chunk_index", "document_id", "filename", "extension", "upload_date"}
+        documents: Dict[str, Dict[str, Any]] = {}
+        next_offset = None
+        scanned = 0
+
+        payload_selector: Any
+        if payload_keys:
+            payload_selector = qmodels.PayloadSelectorInclude(include=list(payload_keys))
+        else:
+            payload_selector = qmodels.PayloadSelectorExclude(exclude=["text"])
+
+        try:
+            while scanned < max_points:
+                points, next_offset = self.client.scroll(
+                    collection_name=collection_name,
+                    limit=min(256, max_points - scanned),
+                    offset=next_offset,
+                    with_payload=payload_selector,
+                    with_vectors=False,
+                )
+                if not points:
+                    break
+
+                for point in points:
+                    payload = point.payload or {}
+                    document_id = payload.get("document_id")
+                    if not document_id:
+                        continue
+
+                    entry = documents.setdefault(
+                        document_id,
+                        {
+                            "document_id": document_id,
+                            "filename": payload.get("filename") or "unknown",
+                            "extension": payload.get("extension"),
+                            "chunk_count": 0,
+                            "upload_date": payload.get("upload_date"),
+                            "metadata": {},
+                        },
+                    )
+                    entry["chunk_count"] += 1
+                    for key, value in payload.items():
+                        if key not in reserved:
+                            entry["metadata"].setdefault(key, value)
+
+                scanned += len(points)
+                if next_offset is None:
+                    break
+
+            return {
+                "documents": sorted(documents.values(), key=lambda d: str(d["filename"]).lower()),
+                "truncated": next_offset is not None,
+                "scanned_chunks": scanned,
+            }
+
+        except Exception as error:  # noqa: BLE001
+            # Nothing ingested yet means no collection, which is an empty list, not a fault.
+            if "not found" in str(error).lower() or "doesn't exist" in str(error).lower():
+                logger.info("Collection '%s' does not exist yet; reporting no documents.", collection_name)
+                return {"documents": [], "truncated": False, "scanned_chunks": 0}
+            logger.exception("Failed to enumerate documents in collection '%s'.", collection_name)
+            raise RuntimeError("Could not list documents from the vector database.") from error
 
     def delete_collection(self, collection_name: str) -> bool:
         """

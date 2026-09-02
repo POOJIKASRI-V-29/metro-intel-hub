@@ -90,13 +90,17 @@ class LLMManager:
         )
 
         logger.info("Generating grounded answer over %d context chunks.", len(context_chunks))
-        answer_text = self.client.generate(
+        result = self.client.generate_with_usage(
             system_prompt=self.system_prompt,
             user_prompt=user_prompt,
         )
 
+        metadata: Dict[str, Any] = {"model": self.client.config.model_name}
+        if result.usage:
+            metadata["token_usage"] = result.usage
+
         return GeneratedAnswer(
-            answer=answer_text.strip(),
+            answer=result.text.strip(),
             context_chunks=context_chunks,
-            metadata={"model": self.client.config.model_name},
+            metadata=metadata,
         )

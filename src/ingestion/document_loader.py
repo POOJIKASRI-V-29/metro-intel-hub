@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field
 
 # Relative sub-module imports within the ingestion folder
 from .validator import DocumentValidator
-from .pdf_parser import PdfParser
-from .docx_parser import DocxParser
-from .image_parser import ImageParser
-from .excel_parser import ExcelParser
+from .pdf_reader import PdfParser
+from .docx_reader import DocxParser
+from .image_reader import ImageParser
+from .excelparser import ExcelParser
 
 # Setup logger mapping to Stage 0 configurations
 logger = logging.getLogger("document_intelligence.ingestion.document_loader")

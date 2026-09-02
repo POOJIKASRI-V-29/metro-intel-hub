@@ -20,7 +20,9 @@ tiktoken>=0.6                    # token-aware chunking
 
 # --- Vector stores ---
 qdrant-client>=1.9
-chromadb>=0.5                    # alternative store used by ChromaVectorStore
+# chromadb>=0.5                  # only needed for ChromaVectorStore in
+#                                # src/embeddings/vector_store.py, which nothing
+#                                # currently imports; uncomment to use that store
 
 # --- Document ingestion / parsing ---
 PyMuPDF>=1.24                    # 'fitz' — PDF text extraction

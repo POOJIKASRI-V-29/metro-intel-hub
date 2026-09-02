@@ -12,4 +12,9 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Outside a Lovable build the nitro deploy plugin is skipped by default, which leaves
+  // only dist/client + dist/server — no server bundle a host can run. Pinning the preset
+  // force-enables nitro and emits .vercel/output (Build Output API v3) for Vercel.
+  // Inside Lovable this override is ignored: that build forces the Cloudflare preset.
+  nitro: { preset: "vercel" },
 });

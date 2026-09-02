@@ -54,8 +54,10 @@ async def execute_rag_chat_turn(
         execution_filters = request.document_ids or None
         filters_dict = None
         if execution_filters:
-            # Format filter constraints so that the vector store filters exclusively within this document scope
-            filters_dict = {"document_id": {"$in": execution_filters}}
+            # Scope the search to the requested documents. A list value is an any-of match
+            # in the vector-store filter contract; a Mongo-style {"$in": [...]} operator
+            # dict is not something the store's exact-match mapping can consume.
+            filters_dict = {"document_id": execution_filters}
 
         # Step 3: Trigger the conversational pipeline processing turn
         pipeline_output = pipeline.execute_chat_turn(

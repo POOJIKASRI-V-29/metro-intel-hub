@@ -27,3 +27,8 @@ database/
 .DS_Store
 .idea/
 .vscode/
+
+# Claude Code local session data
+.claude/worktrees/
+.vercel
+.env*

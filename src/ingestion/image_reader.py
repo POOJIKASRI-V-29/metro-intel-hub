@@ -10,8 +10,15 @@ import io
 import logging
 from typing import Any, BinaryIO, Callable, Optional
 from PIL import Image, UnidentifiedImageError
-import pytesseract
 from pydantic import BaseModel, Field
+
+# Tesseract is an optional dependency (see requirements.txt). Importing this module must
+# not require it, so document types that need no OCR (PDF, DOCX, XLSX) still ingest on
+# hosts without the OCR stack installed.
+try:
+    import pytesseract  # type: ignore
+except ImportError:
+    pytesseract = None
 
 # Setup logger mapping to Stage 0 configurations
 logger = logging.getLogger("document_intelligence.ingestion.image_parser")
@@ -53,8 +60,16 @@ class ImageParser:
             Extracted text string.
             
         Raises:
-            RuntimeError: If the Tesseract binary is not installed or accessible on the host.
+            RuntimeError: If the 'pytesseract' package or the Tesseract binary is
+                not installed or accessible on the host.
         """
+        if pytesseract is None:
+            logger.error("The 'pytesseract' package is not installed in the execution scope.")
+            raise RuntimeError(
+                "OCR Engine failure: 'pytesseract' is not installed. Install it (and the "
+                "Tesseract binary) to ingest images, or inject a different ocr_engine."
+            )
+
         try:
             return pytesseract.image_to_string(image).strip()
         except pytesseract.TesseractNotFoundError as error:
