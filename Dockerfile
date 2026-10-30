@@ -28,19 +28,10 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 COPY requirements.txt .
 
 # Excluded from the image:
-#  - OCR extras (paddleocr, pytesseract) need native engines and only serve image
-#    ingestion; PDF, DOCX and XLSX ingestion never touch them.
-#  - chromadb is an alternative vector store reachable only from an orphaned module
-#    (src/retrieval/semantic_search.py has no importers), so it is never loaded at
-#    runtime — it would add hundreds of MB and a large surface of build failures for
-#    code this deployment cannot execute.
-#
-#    What keeps that safe is that src/embeddings/__init__.py re-exports only the
-#    schemas, so nothing eagerly pulls vector_store.py. Adding ChromaVectorStore to
-#    that __init__ would break this image at import time rather than at first use —
-#    if you do, drop chromadb from the exclusion list below.
+#  - pytesseract needs the native Tesseract engine and only serves image ingestion; PDF,
+#    DOCX and XLSX ingestion never touch it.
 #  - torch is installed above from the CPU wheel index.
-RUN grep -viE '^\s*(paddleocr|pytesseract|chromadb|torch)\b' requirements.txt > requirements.docker.txt \
+RUN grep -viE '^\s*(pytesseract|torch)\b' requirements.txt > requirements.docker.txt \
     && pip install --no-cache-dir -r requirements.docker.txt
 
 COPY config/ ./config/

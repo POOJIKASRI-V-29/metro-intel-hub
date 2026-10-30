@@ -32,3 +32,4 @@ database/
 .claude/worktrees/
 .vercel
 .env*
+!.env.example

@@ -107,6 +107,7 @@ class ErrorCode(str, Enum):
     DOCUMENT_NOT_FOUND = "DOCUMENT_NOT_FOUND"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+    NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 
 
 # Default metadata field names extracted by `agents/metadata_agent.py`.

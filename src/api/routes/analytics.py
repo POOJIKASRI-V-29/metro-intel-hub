@@ -11,6 +11,7 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 
 from config.logging import get_logger
+from src.api.errors import not_implemented
 
 logger = get_logger(__name__)
 
@@ -38,21 +39,6 @@ async def get_dashboard_metrics() -> SystemMetricsResponse:
     This endpoint is intended for administrative use to monitor the health 
     and utilization of the RAG and Knowledge Graph pipelines.
     """
-    logger.debug("Aggregating dashboard analytics metrics.")
-
-    # TODO: Connect to Redis, Prometheus, or your primary database to pull actual metrics.
-    # Returning a simulated response.
-    
-    simulated_metrics = SystemMetricsResponse(
-        total_documents=12450,
-        total_queries_last_24h=842,
-        avg_latency_ms=1250.5,
-        active_users=145,
-        error_rates={
-            "/chat": 0.02,
-            "/upload": 0.05,
-            "/graph": 0.01
-        }
-    )
-    
-    return simulated_metrics
+    logger.debug("Dashboard metrics requested; no metrics backend is wired yet.")
+    # No store records query counts, latency or users yet, so reporting numbers would be fiction.
+    raise not_implemented("Dashboard analytics")
