@@ -8,7 +8,7 @@ what is currently indexed, which listing UIs need to show a corpus at all.
 
 import logging
 import json
-from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, status
 from typing import Optional, TYPE_CHECKING
 
 # Import the Dependency Injection getter
@@ -18,6 +18,8 @@ from ..dependencies import get_upload_pipeline, get_vector_store
 # The concrete pipeline pulls the heavy ML stack (torch / qdrant); import it only for
 # type-checking so this route module stays importable without those dependencies.
 from ..schemas.upload_schema import DocumentListResponse, DocumentSummary, UploadResponse
+from ...ingestion.errors import CorruptedFileError, FileTooLargeError, UnsupportedFileTypeError
+from ...utils.constants import ErrorCode
 
 if TYPE_CHECKING:
     from ...pipeline.upload_pipeline import DocumentUploadPipeline
@@ -30,8 +32,27 @@ router = APIRouter(prefix="/v1/documents", tags=["Document Ingestion"])
 TARGET_COLLECTION = "kmrl_enterprise_docs"
 
 
+def _rejection(status_code: int, error_code: ErrorCode, message: str) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"error_code": error_code.value, "message": message},
+    )
+
+
+def _stream_size(file: UploadFile) -> int:
+    """Size of the upload in bytes, measured from the stream when Starlette did not report it."""
+    if file.size is not None:
+        return file.size
+    file.file.seek(0, 2)
+    size = file.file.tell()
+    file.file.seek(0)
+    return size
+
+
+# Plain `def` on purpose: parsing, embedding and the vector-store write are all blocking,
+# so FastAPI must run the handler in its threadpool instead of on the event loop.
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(
+def upload_document(
     file: UploadFile = File(..., description="The physical file to upload (e.g., PDF, TXT)."),
     metadata_str: Optional[str] = Form(None, alias="metadata", description="Optional JSON string containing file metadata."),
     pipeline: "DocumentUploadPipeline" = Depends(get_upload_pipeline)
@@ -49,11 +70,11 @@ async def upload_document(
             user_metadata = json.loads(metadata_str)
         except json.JSONDecodeError:
             logger.error("Failed to parse metadata JSON string.")
-            raise HTTPException(status_code=400, detail="Invalid JSON format in 'metadata' field.")
+            raise _rejection(status.HTTP_400_BAD_REQUEST, ErrorCode.VALIDATION_ERROR, "Invalid JSON format in 'metadata' field.")
 
     # 2. Extract file details
     filename = file.filename or "unknown_file"
-    file_size = file.size or 0
+    file_size = _stream_size(file)
 
     try:
         # 3. Stream the file directly into the pipeline
@@ -74,19 +95,31 @@ async def upload_document(
             metadata_attached=user_metadata
         )
 
-    except ValueError as ve:
-        logger.warning(f"Validation error during file processing: {str(ve)}")
-        raise HTTPException(status_code=400, detail=str(ve))
-    except Exception as e:
+    except FileTooLargeError as error:
+        logger.warning(f"Upload rejected (too large): {error}")
+        raise _rejection(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, ErrorCode.FILE_TOO_LARGE, str(error)) from error
+    except UnsupportedFileTypeError as error:
+        logger.warning(f"Upload rejected (unsupported type): {error}")
+        raise _rejection(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, ErrorCode.UNSUPPORTED_FILE_TYPE, str(error)) from error
+    except CorruptedFileError as error:
+        logger.warning(f"Upload rejected (unreadable): {error}")
+        raise _rejection(status.HTTP_422_UNPROCESSABLE_ENTITY, ErrorCode.CORRUPTED_FILE, str(error)) from error
+    except ValueError as error:
+        logger.warning(f"Upload rejected: {error}")
+        raise _rejection(status.HTTP_400_BAD_REQUEST, ErrorCode.VALIDATION_ERROR, str(error)) from error
+    except Exception as error:
         logger.exception("Internal server error during document upload.")
-        raise HTTPException(status_code=500, detail="An internal error occurred while processing the document.")
+        raise _rejection(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, ErrorCode.INTERNAL_ERROR,
+            "An internal error occurred while processing the document.",
+        ) from error
     finally:
         # Always ensure the file stream is closed to prevent memory/file-descriptor leaks
         file.file.close()
 
 
 @router.get("", response_model=DocumentListResponse)
-async def list_documents(
+def list_documents(
     store = Depends(get_vector_store),
 ) -> DocumentListResponse:
     """

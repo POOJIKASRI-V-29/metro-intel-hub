@@ -110,7 +110,7 @@ class DocumentLoader:
                         )
                     )
 
-            elif target_ext in {".docx", ".doc"}:
+            elif target_ext == ".docx":
                 docx_elements = self.docx_parser.parse_stream(file_stream)
                 for elem in docx_elements:
                     blocks.append(
@@ -137,7 +137,7 @@ class DocumentLoader:
                     )
                 )
 
-            elif target_ext in {".xlsx", ".xls"}:
+            elif target_ext == ".xlsx":
                 parsed_sheets = self.excel_parser.parse_stream(file_stream)
                 for s_idx, sheet in enumerate(parsed_sheets, start=1):
                     # We store the pre-compiled sheet markdown table representation as a core text block

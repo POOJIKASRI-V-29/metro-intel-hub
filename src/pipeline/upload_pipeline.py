@@ -82,6 +82,11 @@ class DocumentUploadPipeline:
 
         Returns:
             UploadResult containing the generated UUID and processing metrics.
+
+        Raises:
+            ValueError: The document was rejected (empty, too large, unsupported or
+                unreadable). Propagated unwrapped so the API can answer with a 4xx.
+            RuntimeError: Any other failure while processing or storing the document.
         """
         logger.info(f"--- Starting upload pipeline for file: {filename} ({file_size} bytes) ---")
         
@@ -146,6 +151,10 @@ class DocumentUploadPipeline:
                 status="success"
             )
 
+        except ValueError:
+            # A rejected document is the client's problem, not a pipeline fault.
+            logger.warning(f"Document '{filename}' was rejected during ingestion.")
+            raise
         except Exception as error:
             logger.exception(f"Pipeline encountered a fatal error while processing {filename}.")
             raise RuntimeError(f"Document processing pipeline failed: {str(error)}") from error

@@ -15,6 +15,8 @@ from fastapi.responses import JSONResponse
 
 # Import structural dependency resolvers to manage lifecycle states
 from .dependencies import get_vector_store, get_embedding_manager, get_llm_manager
+from .middleware.body_limit import MaxBodySizeMiddleware
+from ..ingestion.validator import ValidationConfig
 
 # Import isolated route engines from the route package layout
 from .routes.upload import router as upload_router
@@ -82,6 +84,16 @@ app = FastAPI(
 )
 
 # --- Global Middleware Configuration ---
+
+# Reject oversize uploads before Starlette spools them. Added before CORS so it sits inside
+# it: the 413 then still carries CORS headers and the browser can read it.
+# Multipart framing adds a little to the file's own size; allow 1 MiB of headroom so a
+# file at exactly the limit is judged by the validator (with its clearer message).
+app.add_middleware(
+    MaxBodySizeMiddleware,
+    path="/v1/documents/upload",
+    max_bytes=ValidationConfig().max_file_size_bytes + 1024 * 1024,
+)
 
 # Configure Cross-Origin Resource Sharing (CORS) parameters to unblock frontend integrations
 app.add_middleware(
