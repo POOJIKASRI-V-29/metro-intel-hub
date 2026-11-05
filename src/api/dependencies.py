@@ -146,6 +146,37 @@ def get_chat_pipeline():
     return _get_or_build("chat_pipeline", build)
 
 
+# --------------------------------------------------------------------------- #
+# LLM agents
+# --------------------------------------------------------------------------- #
+
+def get_classifier_agent():
+    """Return the shared document classification agent."""
+    def build():
+        from src.agents.classifier_agent import ClassifierAgent
+        return ClassifierAgent(get_llm_manager().client.generate)
+
+    return _get_or_build("classifier_agent", build)
+
+
+def get_summarizer_agent():
+    """Return the shared summarization agent."""
+    def build():
+        from src.agents.summarizer_agent import SummarizerAgent
+        return SummarizerAgent(get_llm_manager().client.generate)
+
+    return _get_or_build("summarizer_agent", build)
+
+
+def get_metadata_agent():
+    """Return the shared metadata extraction agent."""
+    def build():
+        from src.agents.metadata_agent import MetadataAgent
+        return MetadataAgent(get_llm_manager().client.generate)
+
+    return _get_or_build("metadata_agent", build)
+
+
 def reset_singletons() -> None:
     """Clear the singleton cache (useful for tests)."""
     _SINGLETONS.clear()

@@ -111,8 +111,8 @@ class ClassifierAgent:
             try:
                 category_enum = DocumentCategory(raw_category)
             except ValueError:
-                logger.warning(f"LLM returned invalid category '{raw_category}'. Defaulting to GENERIC.")
-                category_enum = DocumentCategory.GENERIC # Assuming you have a fallback
+                logger.warning(f"LLM returned invalid category '{raw_category}'. Defaulting to OTHER.")
+                category_enum = DocumentCategory.OTHER
 
             return ClassificationResult(
                 category=category_enum,

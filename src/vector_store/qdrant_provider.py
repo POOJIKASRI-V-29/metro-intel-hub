@@ -292,6 +292,114 @@ class QdrantProvider(BaseVectorStore):
             logger.exception("Failed to enumerate documents in collection '%s'.", collection_name)
             raise RuntimeError("Could not list documents from the vector database.") from error
 
+    @staticmethod
+    def _document_filter(document_id: str) -> Any:
+        """Builds the payload filter selecting every chunk of one document."""
+        return qmodels.Filter(
+            must=[qmodels.FieldCondition(key="document_id", match=qmodels.MatchValue(value=document_id))]
+        )
+
+    @staticmethod
+    def _is_missing_collection(error: Exception) -> bool:
+        message = str(error).lower()
+        return "not found" in message or "doesn't exist" in message
+
+    def get_document_chunks(
+        self,
+        collection_name: str,
+        document_id: str,
+        max_chunks: int = 10,
+        with_text: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """
+        Returns the payloads of one document's chunks, ordered by ``chunk_index``.
+
+        A document is the set of chunks sharing a ``document_id``. Qdrant cannot order a
+        scroll by an unindexed payload field, so this first scrolls only the
+        ``chunk_index`` of every chunk, picks the first ``max_chunks`` by that order, and
+        then fetches the full payloads for just those points. The (potentially large)
+        chunk text is therefore never hauled across the wire for chunks that are not
+        returned.
+
+        Args:
+            collection_name: Collection holding the document.
+            document_id: Identifier shared by all chunks of the document.
+            max_chunks: Maximum number of chunks to return, lowest ``chunk_index`` first.
+            with_text: Include the chunk ``text`` in each payload.
+
+        Returns:
+            Payload dicts in chunk order. Empty when the document or the collection
+            does not exist.
+
+        Raises:
+            RuntimeError: If the vector database cannot be queried.
+        """
+        if max_chunks < 1:
+            return []
+
+        doc_filter = self._document_filter(document_id)
+        indexed: List[Any] = []
+        next_offset = None
+
+        try:
+            while True:
+                points, next_offset = self.client.scroll(
+                    collection_name=collection_name,
+                    scroll_filter=doc_filter,
+                    limit=256,
+                    offset=next_offset,
+                    with_payload=qmodels.PayloadSelectorInclude(include=["chunk_index"]),
+                    with_vectors=False,
+                )
+                indexed.extend(points)
+                if next_offset is None or not points:
+                    break
+
+            if not indexed:
+                return []
+
+            indexed.sort(key=lambda point: (point.payload or {}).get("chunk_index", 0))
+            selected_ids = [point.id for point in indexed[:max_chunks]]
+
+            payload_selector: Any = True if with_text else qmodels.PayloadSelectorExclude(exclude=["text"])
+            records = self.client.retrieve(
+                collection_name=collection_name,
+                ids=selected_ids,
+                with_payload=payload_selector,
+                with_vectors=False,
+            )
+            payloads = [dict(record.payload or {}) for record in records]
+            payloads.sort(key=lambda payload: payload.get("chunk_index", 0))
+            return payloads
+
+        except Exception as error:  # noqa: BLE001
+            if self._is_missing_collection(error):
+                logger.info("Collection '%s' does not exist yet; document '%s' not found.", collection_name, document_id)
+                return []
+            logger.exception("Failed to read chunks of document '%s' from '%s'.", document_id, collection_name)
+            raise RuntimeError("Could not read document chunks from the vector database.") from error
+
+    def update_document_payload(self, collection_name: str, document_id: str, payload: Dict[str, Any]) -> None:
+        """
+        Merges ``payload`` into every chunk of a document (Qdrant ``set_payload``).
+
+        Existing keys not named in ``payload`` are left untouched.
+
+        Raises:
+            RuntimeError: If the vector database rejects or cannot perform the update.
+        """
+        if not payload:
+            return
+        try:
+            self.client.set_payload(
+                collection_name=collection_name,
+                payload=payload,
+                points=self._document_filter(document_id),
+            )
+        except Exception as error:  # noqa: BLE001
+            logger.exception("Failed to update payload of document '%s' in '%s'.", document_id, collection_name)
+            raise RuntimeError("Could not update document metadata in the vector database.") from error
+
     def delete_collection(self, collection_name: str) -> bool:
         """
         Drops the collection and permanently removes all contained vector points.

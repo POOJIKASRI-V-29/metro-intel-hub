@@ -56,39 +56,63 @@ class SummarizerAgent:
         )
         logger.debug("SummarizerAgent initialized.")
 
-    def generate_summary(self, text: str, focus_area: Optional[str] = None) -> SummaryResult:
+    def generate_summary(
+        self,
+        text: str,
+        focus_area: Optional[str] = None,
+        max_words: Optional[int] = None,
+        strict: bool = False,
+    ) -> SummaryResult:
         """Generates a summary of the provided text.
 
         Args:
             text: The raw document text to summarize.
             focus_area: An optional specific topic to tailor the summary around.
+            max_words: Optional upper bound on the summary's word count. This is a
+                prompt-level instruction; the model is not guaranteed to honour it exactly.
+            strict: When True, LLM and parse failures raise instead of being folded
+                into a placeholder summary. The default (False) keeps the fail-soft
+                behaviour the ingestion workflow relies on.
 
         Returns:
             A SummaryResult dataclass containing the summary and key points.
+
+        Raises:
+            ValueError: Only when ``strict`` is True and the text is empty, the LLM
+                call fails, or its response cannot be parsed.
         """
         if not text or not text.strip():
+            if strict:
+                raise ValueError("Cannot summarize empty text.")
             logger.warning("SummarizerAgent received empty text. Returning empty summary.")
             return SummaryResult(summary="No text provided to summarize.")
 
         user_prompt = f"--- TEXT TO SUMMARIZE ---\n{text}\n\n"
         if focus_area:
             user_prompt += f"--- FOCUS AREA ---\n{focus_area}\n\n"
-            
+        if max_words:
+            user_prompt += f"--- LENGTH LIMIT ---\nKeep the summary to at most {max_words} words.\n\n"
+
         user_prompt += "Generate the summary and key points."
         
         try:
             logger.debug(f"Dispatching summarization request (Text length: {len(text)}, Focus: {focus_area}).")
             raw_response = self.llm_generate(self._system_prompt, user_prompt)
-            return self._parse_response(raw_response)
+            return self._parse_response(raw_response, strict=strict)
         except Exception as exc:
             logger.error(f"SummarizerAgent execution failed: {exc}")
+            if strict:
+                raise ValueError(f"Agent failed to summarize text: {exc}") from exc
             return SummaryResult(
                 summary="An error occurred while attempting to summarize the text.",
                 key_points=[f"Error: {exc}"]
             )
 
-    def _parse_response(self, response_text: str) -> SummaryResult:
-        """Extracts and validates the JSON payload from the LLM's response."""
+    def _parse_response(self, response_text: str, strict: bool = False) -> SummaryResult:
+        """Extracts and validates the JSON payload from the LLM's response.
+
+        When ``strict`` is True a malformed or summary-less response raises ValueError.
+        """
         clean_text = response_text.strip()
         
         if clean_text.startswith("```json"):
@@ -99,6 +123,8 @@ class SummarizerAgent:
         try:
             parsed_data: dict[str, Any] = json.loads(clean_text.strip())
             
+            if strict and not str(parsed_data.get("summary", "")).strip():
+                raise ValueError("LLM response contained no summary.")
             summary = str(parsed_data.get("summary", "No summary generated."))
             
             key_points_raw = parsed_data.get("key_points", [])
@@ -114,6 +140,8 @@ class SummarizerAgent:
 
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.error(f"Failed to parse LLM summarization response: {exc}. Raw: {response_text}")
+            if strict:
+                raise ValueError("Invalid JSON structure returned by LLM.") from exc
             return SummaryResult(
                 summary="The system encountered an error parsing the underlying model's response.",
                 key_points=["JSON parsing failure."]

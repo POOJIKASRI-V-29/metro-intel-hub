@@ -62,17 +62,26 @@ class MetadataAgent:
         )
         logger.debug("MetadataAgent initialized.")
 
-    def extract_metadata(self, text: str) -> MetadataExtractionResult:
+    def extract_metadata(self, text: str, strict: bool = False) -> MetadataExtractionResult:
         """Analyzes the text to extract core metadata fields.
 
         Args:
             text: The raw document text (usually the first few pages/chunks 
                 where metadata is most likely located).
+            strict: When True, LLM and parse failures raise instead of returning
+                "Unknown" placeholders. The default (False) keeps the fail-soft
+                behaviour the ingestion workflow relies on.
 
         Returns:
             A MetadataExtractionResult dataclass containing the parsed fields.
+
+        Raises:
+            ValueError: Only when ``strict`` is True and the text is empty, the LLM
+                call fails, or its response cannot be parsed.
         """
         if not text or not text.strip():
+            if strict:
+                raise ValueError("Cannot extract metadata from empty text.")
             logger.warning("MetadataAgent received empty text. Returning default metadata.")
             return MetadataExtractionResult(title="Unknown", author="Unknown", creation_date="Unknown")
 
@@ -81,14 +90,19 @@ class MetadataAgent:
         try:
             logger.debug(f"Dispatching metadata extraction request (Text length: {len(text)}).")
             raw_response = self.llm_generate(self._system_prompt, user_prompt)
-            return self._parse_response(raw_response)
+            return self._parse_response(raw_response, strict=strict)
         except Exception as exc:
             logger.error(f"MetadataAgent execution failed: {exc}")
+            if strict:
+                raise ValueError(f"Agent failed to extract metadata: {exc}") from exc
             # Fail closed to prevent pipeline crashes
             return MetadataExtractionResult(title="Unknown", author="Unknown", creation_date="Unknown")
 
-    def _parse_response(self, response_text: str) -> MetadataExtractionResult:
-        """Extracts and validates the JSON payload from the LLM's response."""
+    def _parse_response(self, response_text: str, strict: bool = False) -> MetadataExtractionResult:
+        """Extracts and validates the JSON payload from the LLM's response.
+
+        When ``strict`` is True a malformed response raises ValueError.
+        """
         clean_text = response_text.strip()
         
         if clean_text.startswith("```json"):
@@ -114,4 +128,6 @@ class MetadataAgent:
 
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.error(f"Failed to parse LLM metadata response: {exc}. Raw: {response_text}")
+            if strict:
+                raise ValueError("Invalid JSON structure returned by LLM.") from exc
             return MetadataExtractionResult(title="Unknown", author="Unknown", creation_date="Unknown")
