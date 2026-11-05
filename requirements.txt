@@ -20,9 +20,6 @@ tiktoken>=0.6                    # token-aware chunking
 
 # --- Vector stores ---
 qdrant-client>=1.9
-# chromadb>=0.5                  # only needed for ChromaVectorStore in
-#                                # src/embeddings/vector_store.py, which nothing
-#                                # currently imports; uncomment to use that store
 
 # --- Document ingestion / parsing ---
 PyMuPDF>=1.24                    # 'fitz' — PDF text extraction
@@ -32,5 +29,3 @@ Pillow>=10.2                     # image handling for OCR
 
 # --- OCR (optional; also need the native engines installed) ---
 pytesseract>=0.3.10             # requires the Tesseract binary on PATH
-paddleocr>=2.7                  # requires paddlepaddle; install per your platform
-# paddlepaddle>=2.6             # uncomment and pick the right wheel for your OS/GPU

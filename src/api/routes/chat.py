@@ -27,7 +27,7 @@ router = APIRouter(prefix="/v1/chat", tags=["Conversational RAG Operations"])
 
 
 @router.post("", response_model=ChatResponse)
-async def execute_rag_chat_turn(
+def execute_rag_chat_turn(
     request: ChatRequest,
     pipeline: "ChatPipeline" = Depends(get_chat_pipeline)
 ) -> ChatResponse:

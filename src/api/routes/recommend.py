@@ -7,11 +7,11 @@ document ID or user context, utilizing vector similarity and graph relationships
 from __future__ import annotations
 
 from typing import List
-from fastapi import APIRouter, HTTPException, Path, Query, status
+from fastapi import APIRouter, Path, Query
 from pydantic import BaseModel, Field
 
 from config.logging import get_logger
-from src.utils.constants import ErrorCode
+from src.api.errors import not_implemented
 
 logger = get_logger(__name__)
 
@@ -46,37 +46,5 @@ async def get_recommendations(
     This endpoint typically queries the vector database for nearest neighbors 
     or traverses the Knowledge Graph to find documents sharing similar entities.
     """
-    logger.info(f"Fetching up to {limit} recommendations for document: {document_id}")
-
-    try:
-        # TODO: Integrate with vector DB similarity search or graph traversal logic here.
-        # Returning a simulated response to satisfy the frontend contract.
-        simulated_recs = [
-            RecommendationItem(
-                document_id="doc_789",
-                title="Q2 Maintenance Procedures",
-                relevance_score=0.88,
-                recommendation_reason="Shares high semantic overlap regarding track safety."
-            ),
-            RecommendationItem(
-                document_id="doc_456",
-                title="Updated PPE Guidelines",
-                relevance_score=0.75,
-                recommendation_reason="Directly linked via the 'Safety' entity in the Knowledge Graph."
-            )
-        ]
-        
-        return RecommendationResponse(
-            source_document_id=document_id,
-            recommendations=simulated_recs[:limit]
-        )
-        
-    except Exception as exc:
-        logger.error(f"Failed to generate recommendations for {document_id}: {exc}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                "error_code": ErrorCode.INTERNAL_ERROR, 
-                "message": "The recommendation engine encountered an error."
-            }
-        )
+    logger.info(f"Recommendations requested for document {document_id} (limit {limit}); not implemented yet.")
+    raise not_implemented("Document recommendations")

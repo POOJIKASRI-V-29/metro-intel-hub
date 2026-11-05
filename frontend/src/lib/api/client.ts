@@ -65,14 +65,25 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Turns FastAPI's `detail` into text a person can read. Routes answer with either a
+ * plain string or `{ error_code, message }`; anything else is stringified as a last resort.
+ */
+function detailToText(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  if (detail != null) return JSON.stringify(detail);
+  return null;
+}
+
 /** Pulls FastAPI's `{"detail": ...}` out of an error body, whatever shape it took. */
 async function extractDetail(response: Response): Promise<string | null> {
   try {
     const body = await response.json();
-    const detail = (body as { detail?: unknown }).detail;
-    if (typeof detail === "string") return detail;
-    if (detail != null) return JSON.stringify(detail);
-    return null;
+    return detailToText((body as { detail?: unknown }).detail);
   } catch {
     return null;
   }
@@ -190,7 +201,7 @@ export const api = {
           new ApiError(
             `Upload failed with ${xhr.status}`,
             xhr.status,
-            typeof detail === "string" ? detail : detail != null ? JSON.stringify(detail) : null,
+            detailToText(detail),
           ),
         );
       });

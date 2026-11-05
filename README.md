@@ -180,8 +180,7 @@ The command centre, reading a live index — every figure on it is measured, not
 - The ingestion, search and chat path is verified end to end against real services. The analysis and graph endpoints — `/analytics/dashboard`, `/summarize/text`, `/classify/text`, `/metadata/{id}`, `/recommend/{id}` and `/graph/*` — still return placeholder data marked `TODO` in their route modules, and are not yet wired to the services in `src/analysis/` that would implement them.
 - The frontend renders whatever the API actually returns, so a placeholder response surfaces as a placeholder rather than as a figure dressed up as real.
 - `/v1/search` accepts `search_type` and `use_reranker`, but both are currently ignored: every search runs semantic. `src/retrieval/{bm25_search,hybrid_search,reranker}.py` implement those pieces and nothing imports them yet.
-- OCR extras (`paddleocr`, `pytesseract`) are optional and excluded from the container image. Image ingestion needs them plus the native engines; PDF, DOCX and XLSX ingestion do not.
-- `chromadb` is commented out in `requirements.txt` — `ChromaVectorStore` is reachable only from `src/retrieval/semantic_search.py`, which has no importers.
+- `pytesseract` is optional and excluded from the container image. Image ingestion needs it plus the Tesseract binary; PDF, DOCX and XLSX ingestion do not.
 - The `Dockerfile` is written for CPU-only hosts but has not yet been built to completion, so treat the first deploy as the real test.
 
 ## Author

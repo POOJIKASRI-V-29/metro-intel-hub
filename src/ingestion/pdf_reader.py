@@ -11,6 +11,8 @@ from typing import BinaryIO, List
 import fitz  # type: ignore # PyMuPDF
 from pydantic import BaseModel, Field
 
+from .errors import CorruptedFileError, FileTooLargeError
+
 # Setup logger matching enterprise configuration
 logger = logging.getLogger("document_intelligence.ingestion.pdf_parser")
 
@@ -25,14 +27,22 @@ class ParsedPage(BaseModel):
     height: float = Field(..., description="Height of the page in points.")
 
 
+# Upper bound on pages parsed per PDF, so one crafted file cannot pin a worker.
+MAX_PDF_PAGES = 500
+
+
 class PdfParser:
     """
     Handles high-performance text extraction from PDF files and memory streams.
     """
 
-    def __init__(self) -> None:
-        """Initializes the PDF parser component."""
-        pass
+    def __init__(self, max_pages: int = MAX_PDF_PAGES) -> None:
+        """Initializes the PDF parser component.
+
+        Args:
+            max_pages: Documents with more pages than this are rejected.
+        """
+        self.max_pages = max_pages
 
     def parse_stream(self, file_stream: BinaryIO) -> List[ParsedPage]:
         """
@@ -45,7 +55,8 @@ class PdfParser:
             A list of ParsedPage objects containing text and structural metrics.
 
         Raises:
-            ValueError: If the file is corrupted, encrypted, or invalid.
+            CorruptedFileError: If the file is corrupted, encrypted, or invalid.
+            FileTooLargeError: If the document has more than ``max_pages`` pages.
         """
         try:
             # Read stream into bytes to initialize PyMuPDF memory document
@@ -58,7 +69,11 @@ class PdfParser:
             with fitz.open(stream=stream_bytes, filetype="pdf") as doc:
                 if doc.is_encrypted:
                     logger.error("PDF parsing failed: Document is password protected or encrypted.")
-                    raise ValueError("Cannot parse encrypted PDF documents.")
+                    raise CorruptedFileError("Cannot parse encrypted PDF documents.")
+
+                if doc.page_count > self.max_pages:
+                    logger.error(f"PDF rejected: {doc.page_count} pages exceeds the limit of {self.max_pages}.")
+                    raise FileTooLargeError(f"PDF has {doc.page_count} pages; the limit is {self.max_pages}.")
 
                 if doc.page_count == 0:
                     logger.warning("PDF document contains zero pages.")
@@ -84,11 +99,11 @@ class PdfParser:
 
         except fitz.FileDataError as error:
             logger.exception("PyMuPDF failed to process structural PDF binary data.")
-            raise ValueError("The provided stream is not a valid or readable PDF document.") from error
+            raise CorruptedFileError("The provided stream is not a valid or readable PDF document.") from error
         except Exception as error:
             if not isinstance(error, ValueError):
                 logger.exception("An unhandled error occurred during PDF stream extraction.")
-                raise ValueError("An internal error occurred while parsing the PDF document.") from error
+                raise CorruptedFileError("An internal error occurred while parsing the PDF document.") from error
             raise
 
     def parse_file(self, file_path: str) -> List[ParsedPage]:

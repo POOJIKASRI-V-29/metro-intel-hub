@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import BinaryIO, Dict, Set
 from pydantic import BaseModel, Field
 
+from .errors import EmptyFileError, FileTooLargeError, UnsupportedFileTypeError
+
 # Setup logger mapping to Stage 0 configurations
 logger = logging.getLogger("document_intelligence.ingestion.validator")
 
@@ -23,7 +25,7 @@ class ValidationConfig(BaseModel):
         description="Maximum allowed file size in bytes."
     )
     allowed_extensions: Set[str] = Field(
-        default={".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".xlsx", ".xls"},
+        default={".pdf", ".docx", ".png", ".jpg", ".jpeg", ".xlsx"},
         description="Set of permitted lower-case file extensions including the leading dot."
     )
 
@@ -39,6 +41,12 @@ class DocumentValidator:
         b"PK\x03\x04": ".docx",  # OpenXML format (DOCX, XLSX)
         b"\x89PNG\r\n\x1a\n": ".png",
         b"\xff\xd8\xff": ".jpg"   # Covers JPEG/JPG
+    }
+
+    # Extensions that legitimately share one signature (OpenXML containers, JPEG spellings).
+    EXTENSION_FAMILIES: Dict[str, Set[str]] = {
+        ".docx": {".docx", ".xlsx"},
+        ".jpg": {".jpg", ".jpeg"},
     }
 
     def __init__(self, config: ValidationConfig | None = None) -> None:
@@ -61,17 +69,18 @@ class DocumentValidator:
             True if within acceptable limits.
 
         Raises:
-            ValueError: If file size is less than or equal to 0, or exceeds max limit.
+            EmptyFileError: If file size is less than or equal to 0.
+            FileTooLargeError: If file size exceeds the max limit.
         """
         if file_size <= 0:
             logger.error("Validation failed: File is completely empty (0 bytes).")
-            raise ValueError("File cannot be empty.")
+            raise EmptyFileError("File cannot be empty.")
 
         if file_size > self.config.max_file_size_bytes:
             max_mb = self.config.max_file_size_bytes / (1024 * 1024)
             actual_mb = file_size / (1024 * 1024)
             logger.error(f"Validation failed: File size ({actual_mb:.2f} MB) exceeds limit ({max_mb:.2f} MB).")
-            raise ValueError(f"File size exceeds maximum permitted limit of {max_mb:.1f} MB.")
+            raise FileTooLargeError(f"File size exceeds maximum permitted limit of {max_mb:.1f} MB.")
 
         return True
 
@@ -86,18 +95,18 @@ class DocumentValidator:
             The normalized lower-case extension string (e.g., '.pdf').
 
         Raises:
-            ValueError: If the extension is empty or not in the whitelist.
+            UnsupportedFileTypeError: If the extension is empty or not in the whitelist.
         """
         path = Path(filename)
         extension = path.suffix.lower()
 
         if not extension:
             logger.error(f"Validation failed: Filename '{filename}' does not contain an extension.")
-            raise ValueError("Filename must have a valid extension.")
+            raise UnsupportedFileTypeError("Filename must have a valid extension.")
 
         if extension not in self.config.allowed_extensions:
             logger.error(f"Validation failed: Extension '{extension}' is not supported.")
-            raise ValueError(f"Unsupported file extension '{extension}'.")
+            raise UnsupportedFileTypeError(f"Unsupported file extension '{extension}'.")
 
         return extension
 
@@ -114,7 +123,7 @@ class DocumentValidator:
             True if the binary headers match acceptable formats.
 
         Raises:
-            ValueError: If file signatures do not match the declared extension.
+            UnsupportedFileTypeError: If file signatures do not match the declared extension.
         """
         try:
             # Save original stream pointer position
@@ -127,28 +136,23 @@ class DocumentValidator:
             # Return pointer to its original state to avoid side-effects down the pipeline
             file_stream.seek(original_position)
 
-            # Special validation pass for formats we track via magic bytes
-            matched_extension: str | None = None
-            for signature, ext in self.MAGIC_SIGNATURES.items():
-                if header_bytes.startswith(signature):
-                    matched_extension = ext
-                    break
+            # An extension with tracked signatures must start with one of them; otherwise
+            # the file is not what its name claims, whatever it actually is.
+            valid_signatures = tuple(
+                signature
+                for signature, family in self.MAGIC_SIGNATURES.items()
+                if expected_extension in self.EXTENSION_FAMILIES.get(family, {family})
+            )
+            if valid_signatures and header_bytes.startswith(valid_signatures):
+                return True
 
-            if matched_extension is not None:
-                # Direct check or generic check for OpenXML containers (.docx and .xlsx share PK header)
-                if matched_extension == ".docx" and expected_extension in {".docx", ".xlsx"}:
-                    return True
-                if matched_extension == expected_extension:
-                    return True
-                
-                logger.error(
-                    f"Spoofing attempt detected! Declared: {expected_extension}, Header matches: {matched_extension}"
-                )
-                raise ValueError("File content does not match its file extension declaration.")
+            if not valid_signatures:
+                # No signature is tracked for this extension; accept it, but leave a trace.
+                logger.warning(f"File validation bypasses deep binary headers for extension type: {expected_extension}")
+                return True
 
-            # Pass files we don't strictly index via magic bytes (like legacy .xls) but warn in logs
-            logger.warning(f"File validation bypasses deep binary headers for extension type: {expected_extension}")
-            return True
+            logger.error(f"Spoofing attempt detected! Declared: {expected_extension}, header: {header_bytes!r}")
+            raise UnsupportedFileTypeError("File content does not match its file extension declaration.")
 
         except Exception as error:
             if not isinstance(error, ValueError):

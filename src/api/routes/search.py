@@ -26,7 +26,7 @@ router = APIRouter(prefix="/v1/search", tags=["Document Retrieval Operations"])
 
 
 @router.post("", response_model=SearchResponse)
-async def execute_document_search(
+def execute_document_search(
     request: SearchRequest,
     pipeline: "SearchPipeline" = Depends(get_search_pipeline)
 ) -> SearchResponse:
